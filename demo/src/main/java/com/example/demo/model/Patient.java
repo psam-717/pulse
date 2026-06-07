@@ -26,7 +26,14 @@ public class Patient {
 
     private String email;
 
+    @Column(unique = true)
     private String phone;
+
+    @Column(unique = true)
+    private String ghanaCard;
+
+    @Column(nullable = false)
+    private String password;
 
     private String address;
 
@@ -41,7 +48,8 @@ public class Patient {
     public Patient() {}
 
     public Patient(String firstName, String lastName, LocalDate dateOfBirth,
-                   Gender gender, String email, String phone, String address) {
+                   Gender gender, String email, String phone, String address,
+                   String ghanaCard, String password) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.dateOfBirth = dateOfBirth;
@@ -49,6 +57,8 @@ public class Patient {
         this.email = email;
         this.phone = phone;
         this.address = address;
+        this.ghanaCard = ghanaCard;
+        this.password = password;
     }
 
     public Long getId() { return id; }
@@ -70,6 +80,12 @@ public class Patient {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public String getGhanaCard() { return ghanaCard; }
+    public void setGhanaCard(String ghanaCard) { this.ghanaCard = ghanaCard; }
+
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
 
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
