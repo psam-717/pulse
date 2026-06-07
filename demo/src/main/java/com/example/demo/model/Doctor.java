@@ -18,12 +18,22 @@ public class Doctor {
 
     private String specialization;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
+
     private String email;
 
     private String phone;
 
     @Column(unique = true)
     private String licenseNumber;
+
+    @Column(unique = true, nullable = false)
+    private String workspaceId;
+
+    @Column(nullable = false)
+    private String password;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hospital_id")
@@ -32,14 +42,19 @@ public class Doctor {
     public Doctor() {}
 
     public Doctor(String firstName, String lastName, String specialization,
-                  String email, String phone, String licenseNumber, Hospital hospital) {
+                  String email, String phone, String licenseNumber,
+                  String workspaceId, String password,
+                  Hospital hospital, Department department) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.specialization = specialization;
         this.email = email;
         this.phone = phone;
         this.licenseNumber = licenseNumber;
+        this.workspaceId = workspaceId;
+        this.password = password;
         this.hospital = hospital;
+        this.department = department;
     }
 
     public Long getId() { return id; }
@@ -53,6 +68,9 @@ public class Doctor {
     public String getSpecialization() { return specialization; }
     public void setSpecialization(String specialization) { this.specialization = specialization; }
 
+    public Department getDepartment() { return department; }
+    public void setDepartment(Department department) { this.department = department; }
+
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
 
@@ -61,6 +79,12 @@ public class Doctor {
 
     public String getLicenseNumber() { return licenseNumber; }
     public void setLicenseNumber(String licenseNumber) { this.licenseNumber = licenseNumber; }
+
+    public String getWorkspaceId() { return workspaceId; }
+    public void setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; }
+
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
 
     public Hospital getHospital() { return hospital; }
     public void setHospital(Hospital hospital) { this.hospital = hospital; }
