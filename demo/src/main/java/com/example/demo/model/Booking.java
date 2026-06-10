@@ -17,8 +17,8 @@ public class Booking {
     private Patient patient;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "doctor_id", nullable = false)
-    private Doctor doctor;
+    @JoinColumn(name = "doctor_id")
+    private Doctor doctor;                // assigned by hospital admin later
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id", nullable = false)
@@ -29,7 +29,7 @@ public class Booking {
     private Hospital hospital;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "time_slot_id", nullable = false)
+    @JoinColumn(name = "time_slot_id")
     private TimeSlot timeSlot;
 
     @Column(nullable = false)
@@ -46,6 +46,10 @@ public class Booking {
     @Column(nullable = false)
     private BigDecimal amountDue;
 
+    private Boolean checkedIn = false;
+
+    private LocalDateTime checkInTime;
+
     public Booking() {}
 
     public Booking(Patient patient, Doctor doctor, Department department, Hospital hospital,
@@ -60,6 +64,8 @@ public class Booking {
         this.paymentStatus = PaymentStatus.PENDING;
         this.amountDue = amountDue;
     }
+
+    // --- Getters & Setters ---
 
     public Long getId() { return id; }
 
@@ -89,4 +95,10 @@ public class Booking {
 
     public BigDecimal getAmountDue() { return amountDue; }
     public void setAmountDue(BigDecimal amountDue) { this.amountDue = amountDue; }
+
+    public Boolean getCheckedIn() { return checkedIn; }
+    public void setCheckedIn(Boolean checkedIn) { this.checkedIn = checkedIn; }
+
+    public LocalDateTime getCheckInTime() { return checkInTime; }
+    public void setCheckInTime(LocalDateTime checkInTime) { this.checkInTime = checkInTime; }
 }

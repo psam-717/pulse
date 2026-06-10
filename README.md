@@ -30,51 +30,82 @@ src/main/java/com/example/demo/
 │   ├── AuthController.java      # Patient auth endpoints
 │   ├── AdminController.java     # Doctor/Admin auth + management
 │   ├── BookingController.java   # Booking CRUD
-│   ├── HospitalController.java  # Hospital listing
 │   ├── DepartmentController.java# Department listing
 │   ├── DoctorController.java    # Doctor listing
-│   ├── TimeSlotController.java  # Available slot listing
-│   └── HelloController.java     # Health check endpoints
+│   ├── HelloController.java     # Health check endpoints
+│   ├── HospitalController.java  # Hospital CRUD + department/hours mgmt
+│   ├── HospitalAdminController.java # Super admin verify endpoint
+│   └── TimeSlotController.java  # Available slot listing
 ├── service/
 │   ├── AuthService.java         # Patient signup (OTP) + login
+│   ├── BookingService.java      # Booking logic + slot queries
 │   ├── DoctorAdminService.java  # Doctor creation + login
-│   └── BookingService.java      # Booking logic + discovery flow
+│   └── HospitalService.java     # Hospital registration, login, verify, dept mgmt
 ├── model/
-│   ├── Patient.java             # Patient / end-user accounts
-│   ├── Doctor.java              # Doctor / admin accounts
-│   ├── Hospital.java            # Healthcare facility
-│   ├── Department.java          # Medical department (per hospital)
+│   ├── AdminRole.java           # STAFF, HOSPITAL_ADMIN, SUPER_ADMIN
 │   ├── Booking.java             # Appointment booking record
-│   ├── TimeSlot.java            # Doctor's available time slots
-│   ├── PendingRegistration.java # Temp storage for OTP signup flow
 │   ├── BookingStatus.java       # PENDING_PAYMENT / CONFIRMED / CANCELLED
+│   ├── Department.java          # Medical department (per hospital)
+│   ├── Doctor.java              # Doctor / admin accounts
+│   ├── Gender.java              # MALE / FEMALE / OTHER
+│   ├── Hospital.java            # Healthcare facility
+│   ├── HospitalAdmin.java       # Hospital admin & super admin accounts
+│   ├── Patient.java             # Patient / end-user accounts
 │   ├── PaymentStatus.java       # PENDING / PAID / FAILED
-│   └── Gender.java              # MALE / FEMALE / OTHER
+│   ├── PendingRegistration.java # Temp storage for OTP signup flow
+│   ├── TimeSlot.java            # Doctor's available time slots
+│   ├── VerificationStatus.java  # PENDING / APPROVED / REJECTED
+│   └── WorkingHours.java        # Weekly schedule per hospital
 ├── dto/
-│   ├── SignupRequest.java       # Patient signup payload
-│   ├── VerifyOtpRequest.java    # OTP verification payload
-│   ├── PatientLoginRequest.java # Patient login (ghanaCard OR phone)
-│   ├── DoctorLoginRequest.java  # Doctor login (workspaceId + email)
-│   ├── CreateDoctorRequest.java # Admin creates a doctor account
+│   ├── ApiResponse.java         # Generic success/error response
 │   ├── AuthResponse.java        # JWT token response
 │   ├── BookingRequest.java      # Create booking payload
 │   ├── BookingResponse.java     # Booking summary response
+│   ├── CreateDoctorRequest.java # Admin creates a doctor account
+│   ├── DepartmentRequest.java   # Create department payload
+│   ├── DoctorLoginRequest.java  # Doctor login (workspaceId + email)
+│   ├── HospitalLoginRequest.java# Hospital admin login payload
+│   ├── HospitalRequest.java     # Register hospital payload
+│   ├── HospitalResponse.java    # Hospital details response
+│   ├── LicenseVerifyRequest.java# Approve/reject license
+│   ├── PatientLoginRequest.java # Patient login (ghanaCard OR phone)
 │   ├── PaymentUpdateRequest.java# Update booking payment status
-│   └── ApiResponse.java         # Generic success/error response
+│   ├── RegistrationResponse.java# Hospital registration response
+│   ├── SignupRequest.java       # Patient signup payload
+│   ├── VerifyOtpRequest.java    # OTP verification payload
+│   ├── WorkingHoursEntry.java   # Single day entry (dayOfWeek, open/close)
+│   └── WorkingHoursRequest.java # Batch working hours update payload
 ├── repository/
-│   ├── PatientRepository.java
-│   ├── DoctorRepository.java
-│   ├── HospitalRepository.java
-│   ├── DepartmentRepository.java
 │   ├── BookingRepository.java
+│   ├── DepartmentRepository.java
+│   ├── DoctorRepository.java
+│   ├── HospitalAdminRepository.java
+│   ├── HospitalRepository.java
+│   ├── PatientRepository.java
+│   ├── PendingRegistrationRepository.java
 │   ├── TimeSlotRepository.java
-│   └── PendingRegistrationRepository.java
+│   └── WorkingHoursRepository.java
 └── DemoApplication.java         # Spring Boot entry point
 ```
 
 ---
 
 ## 🔐 Authentication System
+
+The platform supports **four token types**, each with different login endpoints:
+
+| Token Type | Login Endpoint | Role Claim | Extra Claims | Access Level |
+|------------|----------------|------------|--------------|--------------|
+| **Patient** | `POST /api/auth/patient/login` | `PATIENT` | — | Book & pay for appointments |
+| **Doctor** | `POST /api/auth/admin/login` | `DOCTOR` | — | View bookings & schedule |
+| **Hospital Admin** | `POST /api/hospitals/login` | `HOSPITAL_ADMIN` | `hospitalId` | Manage departments & hours |
+| **Super Admin** | `POST /api/hospitals/login` | `SUPER_ADMIN` | `hospitalId: 0` | Verify licenses, full access |
+
+> ✅ **Role enforcement is active.** Every protected endpoint is gated by `@PreAuthorize` annotations. Unauthorized attempts return **403** with a descriptive error message.
+
+Seed credentials for Super Admin:
+- Email: `superadmin@pulse.gh`
+- Password: `superadmin123`
 
 ### Patient Auth (OTP-Based)
 
@@ -221,12 +252,137 @@ Hierarchical browse — hospitals → departments → doctors → available time
 
 ---
 
-## ❤️ Health Check
+## 🏥 Hospital Workspace Management (Phase 1)
+
+Hospital admins register their facilities, manage departments, configure working hours, and go through license verification.
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|:----:|-------------|
-| `/api/hello?name=pulse` | GET | ❌ Public | Ping / greeting test |
-| `/api/status` | GET | ❌ Public | Health status (DB connected, etc.) |
+| `POST /api/hospitals/register` | POST | ❌ Public | Register a new hospital + create primary admin |
+| `POST /api/hospitals/login` | POST | ❌ Public | Hospital admin login → JWT |
+| `GET /api/hospitals/{id}` | GET | ❌ Public | Get hospital details |
+| `POST /api/hospitals/{id}/departments` | POST | ✅ JWT | Create a department |
+| `DELETE /api/hospitals/{id}/departments/{deptId}` | DELETE | ✅ JWT | Delete a department |
+| `PUT /api/hospitals/{id}/working-hours` | PUT | ✅ JWT | Set weekly working hours |
+| `GET /api/hospitals/{id}/working-hours` | GET | ❌ Public | Get working hours |
+| `PUT /api/admin/hospitals/{id}/verify` | PUT | ✅ JWT | Approve or reject license (super admin) |
+
+### Register a Hospital
+```json
+{
+  "name": "Ghana Heart Institute",
+  "licenseNumber": "GHI-2026-0042",
+  "licenseDocumentUrl": "https://storage.example.com/licenses/ghi-0042.pdf",
+  "address": "123 Independence Ave, Accra",
+  "latitude": 5.5600,
+  "longitude": -0.1900,
+  "specialties": "[\"Cardiology\",\"Internal Medicine\"]",
+  "capacity": 200,
+  "phone": "+233****3456",
+  "email": "admin@ghanaheart.org",
+  "adminFullName": "Kwame Asante",
+  "adminEmail": "kwame.asante@ghanaheart.org",
+  "adminPassword": "***",
+  "adminPhone": "+233****3456"
+}
+```
+
+**Response** (201): `{ "status": "success", "message": "...", "hospitalId": 1, "adminId": 1, "token": "jwt..." }`
+
+### Create a Department
+```json
+{
+  "name": "Cardiology",
+  "abbreviation": "CARD",
+  "description": "Heart and cardiovascular care",
+  "consultationFee": 350.00,
+  "parentDepartmentId": null
+}
+```
+
+> ⚠️ This endpoint requires a **HOSPITAL_ADMIN** or **SUPER_ADMIN** token.
+>
+> ⚠️ Duplicate name check: creating a department with the same name in the same hospital returns **400** with message `"Department 'X' already exists in this hospital"`.
+
+### Set Working Hours
+```json
+{
+  "entries": [
+    { "dayOfWeek": 1, "openTime": "08:00", "closeTime": "17:00", "isClosed": false },
+    { "dayOfWeek": 2, "openTime": "08:00", "closeTime": "17:00", "isClosed": false },
+    { "dayOfWeek": 3, "openTime": "08:00", "closeTime": "17:00", "isClosed": false },
+    { "dayOfWeek": 4, "openTime": "08:00", "closeTime": "17:00", "isClosed": false },
+    { "dayOfWeek": 5, "openTime": "08:00", "closeTime": "17:00", "isClosed": false },
+    { "dayOfWeek": 6, "openTime": "09:00", "closeTime": "13:00", "isClosed": false },
+    { "dayOfWeek": 7, "openTime": "00:00", "closeTime": "00:00", "isClosed": true }
+  ]
+}
+```
+*dayOfWeek: 1=Mon → 7=Sun*
+
+### Verify Hospital License (Super Admin Only)
+```json
+{
+  "status": "APPROVED",
+  "rejectionReason": null
+}
+```
+
+> 🔒 This endpoint is restricted to **Super Admin** role. A regular `HOSPITAL_ADMIN` or `DOCTOR` token will receive a **403** error.
+
+---
+
+## ⚠️ Error Responses
+
+All errors follow a consistent format:
+
+```json
+{
+  "status": 400,
+  "message": "Human-readable error description",
+  "errors": ["List of field-level errors (validation only)"],
+  "timestamp": "2026-06-10T..."
+}
+```
+
+| HTTP Status | Scenario |
+|:-----------:|----------|
+| **400** | Validation errors, duplicate entries, business logic errors |
+| **401** | Missing/invalid/expired JWT |
+| **403** | Access denied (insufficient permissions) |
+| **409** | Database constraint violations (duplicate record) |
+| **500** | Unexpected server errors |
+
+---
+
+## 📋 Full Endpoint Summary
+
+| # | Method | Endpoint | Auth | Required Role |
+|---|--------|----------|:----:|:--------------|
+| 1 | GET | `/api/hello?name=pulse` | ❌ | — |
+| 2 | GET | `/api/status` | ❌ | — |
+| 3 | POST | `/api/auth/patient/signup` | ❌ | — |
+| 4 | POST | `/api/auth/patient/verify-otp` | ❌ | — |
+| 5 | POST | `/api/auth/patient/login` | ❌ | — |
+| 6 | POST | `/api/auth/admin/create-doctor` | ❌ | — |
+| 7 | POST | `/api/auth/admin/login` | ❌ | — |
+| 8 | POST | `/api/hospitals/register` | ❌ | — |
+| 9 | POST | `/api/hospitals/login` | ❌ | — |
+| 10 | GET | `/api/hospitals` | ❌ | — |
+| 11 | GET | `/api/hospitals/{id}` | ❌ | — |
+| 12 | GET | `/api/hospitals/{id}/departments` | ❌ | — |
+| 13 | GET | `/api/hospitals/{id}/working-hours` | ❌ | — |
+| 14 | GET | `/api/departments/{id}/doctors` | ❌ | — |
+| 15 | GET | `/api/doctors/{id}/slots` | ❌ | — |
+| 16 | POST | `/api/hospitals/{id}/departments` | ✅ | `HOSPITAL_ADMIN` or `SUPER_ADMIN` |
+| 17 | DELETE | `/api/hospitals/{id}/departments/{deptId}` | ✅ | `HOSPITAL_ADMIN` or `SUPER_ADMIN` |
+| 18 | PUT | `/api/hospitals/{id}/working-hours` | ✅ | `HOSPITAL_ADMIN` or `SUPER_ADMIN` |
+| 19 | PUT | `/api/admin/hospitals/{id}/verify` | ✅ | `SUPER_ADMIN` only |
+| 20 | POST | `/api/bookings` | ✅ | `PATIENT`, `DOCTOR`, or `SUPER_ADMIN` |
+| 21 | GET | `/api/bookings/{id}` | ✅ | Any authenticated |
+| 22 | PATCH | `/api/bookings/{id}/payment` | ✅ | `PATIENT` or `SUPER_ADMIN` |
+
+See `.hermes/plans/2026-06-10_pulse-endpoint-auth-matrix.md` for a detailed breakdown.
 
 ---
 
@@ -256,6 +412,17 @@ On first startup, `DataSeeder` automatically populates the database with:
 | Dr. Kwame Ofori | ORTHO-DOC-001 | Orthopedics | Korle Bu |
 | Dr. Esi Quartey | PEDS-DOC-001 | Pediatrics | Ridge |
 | Dr. Nana Boateng | NEURO-DOC-001 | Neurology | Ridge |
+
+**405 Time Slots (per restart):**
+Generated for each doctor for the next 3 days (today + 2), from 8:00 AM to 5:00 PM in 20-minute intervals. Slots are only seeded if the `time_slots` table is empty.
+
+**Super Admin:**
+- Email: `superadmin@pulse.gh`
+- Password: `superadmin123`
+- Role: `SUPER_ADMIN` (not tied to any hospital)
+
+**Hospital Admin Passwords:**
+Reset to `admin123` automatically on every restart for existing hospital accounts.
 
 ---
 
@@ -365,7 +532,6 @@ jwt.expiration=86400000
 - [ ] Doctor dashboard (view/manage appointments)
 - [ ] Admin CRUD endpoints for hospitals, departments, time slots
 - [ ] Swagger / OpenAPI documentation
-- [ ] Input validation (`@Valid` / Jakarta Bean Validation)
 - [ ] CORS configuration for web + mobile clients
 - [ ] Unit & integration tests
 - [ ] Email notifications & reminders

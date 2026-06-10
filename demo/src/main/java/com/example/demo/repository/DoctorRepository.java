@@ -14,6 +14,7 @@ public interface DoctorRepository extends JpaRepository<Doctor, Long> {
     List<Doctor> findByDepartmentId(Long departmentId);
     Optional<Doctor> findByWorkspaceId(String workspaceId);
     Optional<Doctor> findByWorkspaceIdAndEmail(String workspaceId, String email);
+    long countByDepartmentId(Long departmentId);
 
     @Query("SELECT d.workspaceId FROM Doctor d WHERE d.department.abbreviation = :abbrev ORDER BY d.workspaceId DESC LIMIT 1")
     Optional<String> findLastWorkspaceIdByDepartmentAbbreviation(@Param("abbrev") String abbreviation);
