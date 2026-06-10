@@ -3,9 +3,14 @@ package com.example.demo.config;
 import com.example.demo.model.Department;
 import com.example.demo.model.Doctor;
 import com.example.demo.model.Hospital;
+import com.example.demo.model.HospitalAdmin;
+import com.example.demo.model.AdminRole;
+import com.example.demo.model.TimeSlot;
 import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.DoctorRepository;
+import com.example.demo.repository.HospitalAdminRepository;
 import com.example.demo.repository.HospitalRepository;
+import com.example.demo.repository.TimeSlotRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -20,14 +25,20 @@ public class DataSeeder implements CommandLineRunner {
     private final HospitalRepository hospitalRepository;
     private final DepartmentRepository departmentRepository;
     private final DoctorRepository doctorRepository;
+    private final HospitalAdminRepository adminRepository;
+    private final TimeSlotRepository timeSlotRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public DataSeeder(HospitalRepository hospitalRepository,
                       DepartmentRepository departmentRepository,
-                      DoctorRepository doctorRepository) {
+                      DoctorRepository doctorRepository,
+                      HospitalAdminRepository adminRepository,
+                      TimeSlotRepository timeSlotRepository) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
         this.doctorRepository = doctorRepository;
+        this.adminRepository = adminRepository;
+        this.timeSlotRepository = timeSlotRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -35,7 +46,9 @@ public class DataSeeder implements CommandLineRunner {
     public void run(String... args) {
         // Only seed if no data exists yet
         if (hospitalRepository.count() > 0) {
-            log.info("Data already seeded — skipping");
+            ensureSuperAdminExists();
+            seedTimeSlotsIfEmpty();
+            log.info("Database already seeded — skipping");
             return;
         }
 
@@ -44,14 +57,16 @@ public class DataSeeder implements CommandLineRunner {
         // --- HOSPITALS ---
         Hospital korleBu = hospitalRepository.save(
                 new Hospital("Korle Bu Teaching Hospital",
+                        "MLSC-KB-2020-001",
                         "Guggisberg Ave, Accra", "+233 302 665 901",
-                        "info@korlebu.gov.gh", "https://korlebu.gov.gh")
+                        "info@korlebu.gov.gh")
         );
 
         Hospital ridge = hospitalRepository.save(
                 new Hospital("Ridge Hospital",
+                        "MLSC-RH-2015-002",
                         "Castle Rd, Accra", "+233 302 220 000",
-                        "info@ridgehospital.gh", null)
+                        "info@ridgehospital.gh")
         );
 
         // --- DEPARTMENTS ---
@@ -107,6 +122,74 @@ public class DataSeeder implements CommandLineRunner {
                 "NEURO-DOC-001", password, ridge, neuro));
 
         log.info("✅ Seeded: 2 hospitals, 4 departments, 5 doctors");
+
+        // --- TIME SLOTS (3 days, 8AM–5PM, 20-min intervals) ---
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalTime startTime = java.time.LocalTime.of(8, 0);
+        java.time.LocalTime endTime = java.time.LocalTime.of(17, 0);
+        int slotDuration = 20; // minutes (matches default consultationDuration)
+        int slotsGenerated = 0;
+
+        for (Doctor doc : doctorRepository.findAll()) {
+            for (int dayOffset = 0; dayOffset < 3; dayOffset++) {
+                java.time.LocalDate slotDate = today.plusDays(dayOffset);
+                for (java.time.LocalTime t = startTime; t.isBefore(endTime); t = t.plusMinutes(slotDuration)) {
+                    timeSlotRepository.save(new TimeSlot(doc, slotDate, t, t.plusMinutes(slotDuration)));
+                    slotsGenerated++;
+                }
+            }
+        }
+        log.info("✅ Seeded: {} time slots across {} doctors for 3 days", slotsGenerated, doctorRepository.count());
+
+        // --- SUPER ADMIN (not tied to any hospital) ---
+        String superPassword = passwordEncoder.encode("superadmin123");
+        adminRepository.save(new HospitalAdmin(
+                null, "Super Admin", "superadmin@pulse.gh",
+                superPassword, "+233 500 000 000", AdminRole.SUPER_ADMIN
+        ));
+        log.info("✅ Super admin created: superadmin@pulse.gh / superadmin123");
         log.info("🔑 Doctor password: admin123");
+    }
+
+    private void ensureSuperAdminExists() {
+        if (adminRepository.findByEmail("superadmin@pulse.gh").isEmpty()) {
+            String superPassword = passwordEncoder.encode("superadmin123");
+            adminRepository.save(new HospitalAdmin(
+                    null, "Super Admin", "superadmin@pulse.gh",
+                    superPassword, "+233 500 000 000", AdminRole.SUPER_ADMIN
+            ));
+            log.info("✅ Super admin created (lazy): superadmin@pulse.gh / superadmin123");
+        }
+
+        // Reset all hospital admin passwords to "admin123" every restart (dev only)
+        String devPassword = passwordEncoder.encode("admin123");
+        for (HospitalAdmin admin : adminRepository.findAll()) {
+            if (admin.getRole() != AdminRole.SUPER_ADMIN && !passwordEncoder.matches("admin123", admin.getPassword())) {
+                admin.setPassword(devPassword);
+                adminRepository.save(admin);
+                log.info("🔄 Reset password for: {}", admin.getEmail());
+            }
+        }
+    }
+
+    private void seedTimeSlotsIfEmpty() {
+        if (timeSlotRepository.count() > 0) {
+            return; // already seeded
+        }
+        log.info("⏰ Seeding time slots for existing doctors...");
+        java.time.LocalDate today = java.time.LocalDate.now();
+        int slotsGenerated = 0;
+        for (Doctor doc : doctorRepository.findAll()) {
+            for (int dayOffset = 0; dayOffset < 3; dayOffset++) {
+                java.time.LocalDate slotDate = today.plusDays(dayOffset);
+                for (java.time.LocalTime t = java.time.LocalTime.of(8, 0);
+                        t.isBefore(java.time.LocalTime.of(17, 0));
+                        t = t.plusMinutes(20)) {
+                    timeSlotRepository.save(new TimeSlot(doc, slotDate, t, t.plusMinutes(20)));
+                    slotsGenerated++;
+                }
+            }
+        }
+        log.info("✅ Seeded {} time slots", slotsGenerated);
     }
 }
