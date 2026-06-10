@@ -22,19 +22,17 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse> signup(@RequestBody SignupRequest request) {
         authService.initiateSignup(request);
-        return ResponseEntity.ok(new ApiResponse(
-                "success",
-                "OTP sent to " + request.phone() + ". Please verify to complete registration."
-        ));
+        return ResponseEntity.ok(ApiResponse.success(
+                        "OTP sent to " + request.phone() + ". Please verify to complete registration."
+                ));
     }
 
     @PostMapping("/verify-otp")
     public ResponseEntity<ApiResponse> verifyOtp(@RequestBody VerifyOtpRequest request) {
         authService.verifyOtpAndCreatePatient(request);
-        return ResponseEntity.ok(new ApiResponse(
-                "success",
-                "Phone verified. Account created successfully."
-        ));
+        return ResponseEntity.ok(ApiResponse.success(
+                        "Phone verified. Account created successfully."
+                ));
     }
 
     @PostMapping("/login")
@@ -44,6 +42,6 @@ public class AuthController {
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResponseEntity<ApiResponse> handleErrors(RuntimeException ex) {
-        return ResponseEntity.badRequest().body(new ApiResponse("error", ex.getMessage()));
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, ex.getMessage()));
     }
 }
