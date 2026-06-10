@@ -1,9 +1,12 @@
 package com.example.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
 @Entity
 @Table(name = "doctors")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Doctor {
 
     @Id
@@ -33,7 +36,10 @@ public class Doctor {
     private String workspaceId;
 
     @Column(nullable = false)
+    @JsonIgnore
     private String password;
+
+    private Integer consultationDuration = 20;  // minutes, per doctor
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hospital_id")
@@ -56,6 +62,8 @@ public class Doctor {
         this.hospital = hospital;
         this.department = department;
     }
+
+    // --- Getters & Setters ---
 
     public Long getId() { return id; }
 
@@ -85,6 +93,9 @@ public class Doctor {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public Integer getConsultationDuration() { return consultationDuration; }
+    public void setConsultationDuration(Integer consultationDuration) { this.consultationDuration = consultationDuration; }
 
     public Hospital getHospital() { return hospital; }
     public void setHospital(Hospital hospital) { this.hospital = hospital; }
