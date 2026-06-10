@@ -22,8 +22,7 @@ public class AdminController {
     @PostMapping("/create-doctor")
     public ResponseEntity<ApiResponse> createDoctor(@RequestBody CreateDoctorRequest request) {
         Doctor doctor = doctorAdminService.createDoctor(request);
-        return ResponseEntity.ok(new ApiResponse(
-                "success",
+        return ResponseEntity.ok(ApiResponse.success(
                 "Doctor created with workspace ID: " + doctor.getWorkspaceId()
         ));
     }
@@ -35,6 +34,6 @@ public class AdminController {
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResponseEntity<ApiResponse> handleErrors(RuntimeException ex) {
-        return ResponseEntity.badRequest().body(new ApiResponse("error", ex.getMessage()));
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, ex.getMessage()));
     }
 }
