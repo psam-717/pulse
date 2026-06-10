@@ -23,18 +23,25 @@ public class Department {
     private BigDecimal consultationFee;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_department_id")
+    private Department parentDepartment;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hospital_id", nullable = false)
     private Hospital hospital;
 
     public Department() {}
 
-    public Department(String name, String abbreviation, String description, BigDecimal consultationFee, Hospital hospital) {
+    public Department(String name, String abbreviation, String description,
+                      BigDecimal consultationFee, Hospital hospital) {
         this.name = name;
         this.abbreviation = abbreviation;
         this.description = description;
         this.consultationFee = consultationFee;
         this.hospital = hospital;
     }
+
+    // --- Getters & Setters ---
 
     public Long getId() { return id; }
 
@@ -49,6 +56,9 @@ public class Department {
 
     public BigDecimal getConsultationFee() { return consultationFee; }
     public void setConsultationFee(BigDecimal consultationFee) { this.consultationFee = consultationFee; }
+
+    public Department getParentDepartment() { return parentDepartment; }
+    public void setParentDepartment(Department parentDepartment) { this.parentDepartment = parentDepartment; }
 
     public Hospital getHospital() { return hospital; }
     public void setHospital(Hospital hospital) { this.hospital = hospital; }
