@@ -6,6 +6,7 @@ import com.example.demo.dto.BookingResponse;
 import com.example.demo.dto.PaymentUpdateRequest;
 import com.example.demo.service.BookingService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,16 +20,19 @@ public class BookingController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR', 'SUPER_ADMIN')")
     public ResponseEntity<BookingResponse> createBooking(@RequestBody BookingRequest request) {
         return ResponseEntity.ok(bookingService.createBooking(request));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<BookingResponse> getBookingSummary(@PathVariable Long id) {
         return ResponseEntity.ok(bookingService.getBookingSummary(id));
     }
 
     @PatchMapping("/{id}/payment")
+    @PreAuthorize("hasAnyRole('PATIENT', 'SUPER_ADMIN')")
     public ResponseEntity<BookingResponse> updatePayment(
             @PathVariable Long id,
             @RequestBody PaymentUpdateRequest request) {
@@ -37,6 +41,6 @@ public class BookingController {
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResponseEntity<ApiResponse> handleErrors(RuntimeException ex) {
-        return ResponseEntity.badRequest().body(new ApiResponse("error", ex.getMessage()));
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, ex.getMessage()));
     }
 }
