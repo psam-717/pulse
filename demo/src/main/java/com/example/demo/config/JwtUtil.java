@@ -33,6 +33,17 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateAdminToken(Long adminId, Long hospitalId, String role) {
+        return Jwts.builder()
+                .subject(adminId.toString())
+                .claim("role", role)
+                .claim("hospitalId", hospitalId != null ? hospitalId : 0L)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(secretKey)
+                .compact();
+    }
+
     public Claims parseToken(String token) {
         return Jwts.parser()
                 .verifyWith(secretKey)
