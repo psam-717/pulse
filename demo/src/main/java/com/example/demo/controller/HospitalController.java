@@ -5,7 +5,9 @@ import com.example.demo.dto.*;
 import com.example.demo.model.*;
 import com.example.demo.service.BookingService;
 import com.example.demo.service.HospitalService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -31,26 +33,30 @@ public class HospitalController {
 
     // ===== Registration & Auth =====
 
+    @SecurityRequirements()
     @PostMapping("/register")
     public ResponseEntity<RegistrationResponse> register(@Valid @RequestBody HospitalRequest request) {
         RegistrationResponse response = hospitalService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PostMapping("/login")
+    @SecurityRequirements()
+        @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody HospitalLoginRequest request) {
         return ResponseEntity.ok(hospitalService.login(request));
     }
 
     // ===== Public Discovery =====
 
-    @GetMapping
+    @SecurityRequirements()
+        @GetMapping
     public ResponseEntity<List<Hospital>> listHospitals() {
         return ResponseEntity.ok(bookingService.listHospitals());
     }
 
-    @GetMapping("/{hospitalId}")
-    public ResponseEntity<HospitalResponse> getHospital(@PathVariable Long hospitalId) {
+    @SecurityRequirements()
+        @GetMapping("/{hospitalId}")
+        public ResponseEntity<HospitalResponse> getHospital(@PathVariable Long hospitalId) {
         return ResponseEntity.ok(
                 hospitalService.toResponse(hospitalService.getHospitalById(hospitalId)));
     }
@@ -86,7 +92,8 @@ public class HospitalController {
                 hospitalService.configureWorkingHours(hospitalId, request));
     }
 
-    @GetMapping("/{hospitalId}/working-hours")
+    @SecurityRequirements()
+        @GetMapping("/{hospitalId}/working-hours")
         public ResponseEntity<List<WorkingHours>> getWorkingHours(@PathVariable Long hospitalId) {
             return ResponseEntity.ok(hospitalService.getWorkingHours(hospitalId));
         }

@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +18,7 @@ record StatusResponse(
 public class HelloController{
     
     // returning a simple Map for easy and quick json responses
+    @SecurityRequirements()
     @GetMapping("/api/hello")
     public Map<String, String> sayHello(
                 @RequestParam(value = "name", defaultValue= "pulse") String name) {
@@ -26,8 +28,9 @@ public class HelloController{
             );
     }
 
-    @GetMapping("/api/status")
-    public StatusResponse status() {
+    @SecurityRequirements()
+        @GetMapping("/api/status")
+        public StatusResponse status() {
         return new StatusResponse("up", "Backend is up and connected", "PostgreSQL");
     }
     

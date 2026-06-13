@@ -20,6 +20,11 @@
             "description": "Generated server url"
         }
     ],
+    "security": [
+        {
+            "bearer-jwt": []
+        }
+    ],
     "paths": {
         "/api/hospitals/{hospitalId}/working-hours": {
             "get": {
@@ -52,7 +57,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             },
             "put": {
                 "tags": [
@@ -247,7 +253,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             },
             "post": {
                 "tags": [
@@ -316,7 +323,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/hospitals/login": {
@@ -346,7 +354,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/bookings": {
@@ -406,7 +415,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/auth/patient/signup": {
@@ -436,7 +446,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/auth/patient/login": {
@@ -466,7 +477,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/auth/admin/login": {
@@ -496,7 +508,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/auth/admin/create-doctor": {
@@ -526,7 +539,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/bookings/{id}/payment": {
@@ -587,7 +601,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/hospitals": {
@@ -610,7 +625,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/hospitals/{hospitalId}": {
@@ -641,7 +657,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/hello": {
@@ -675,7 +692,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/doctors/{doctorId}/slots": {
@@ -717,7 +735,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/departments/{departmentId}/doctors": {
@@ -751,7 +770,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/api/bookings/{id}": {
@@ -1446,6 +1466,15 @@
                         "type": "boolean"
                     }
                 }
+            }
+        },
+        "securitySchemes": {
+            "bearer-jwt": {
+                "type": "http",
+                "description": "Enter your JWT token. Get one from POST /api/auth/login or /api/auth/register\n\nExample: admin token \u2192 `Bearer eyJhbGciOiJIUzI1NiJ...`",
+                "name": "bearer-jwt",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
             }
         }
     }
