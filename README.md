@@ -355,7 +355,30 @@ All errors follow a consistent format:
 
 ---
 
-## 📋 Full Endpoint Summary
+## 📖 API Documentation
+
+The API is documented via **OpenAPI 3.0** with an interactive Swagger UI.
+
+### For Your Frontend Team
+
+The latest API spec is committed to the repo at **`docs/openapi.json`**. Your frontend team can:
+
+| Method | How to use |
+|--------|------------|
+| **Open `docs/index.html`** | Clone the repo, open `docs/index.html` in any browser → full interactive Swagger UI with all endpoints, schemas, and "Try it out" |
+| **Import into Postman** | File → Import → choose `docs/openapi.json` → all 21+ endpoints pre-configured |
+| **Swagger Editor** | Paste the JSON at [editor.swagger.io](https://editor.swagger.io) to browse interactively |
+| **Run the server** | `http://localhost:8080/swagger-ui.html` for the live version with real data |
+
+> ⚡ **Whenever endpoints change**, run the server and regenerate the spec:
+> ```bash
+> curl -s http://localhost:8080/v3/api-docs | python -m json.tool > docs/openapi.json
+> ```
+> Then commit + push to keep the team in sync.
+
+---
+
+## 🏥 Endpoint Summary (Updated)
 
 | # | Method | Endpoint | Auth | Required Role |
 |---|--------|----------|:----:|:--------------|
@@ -381,6 +404,8 @@ All errors follow a consistent format:
 | 20 | POST | `/api/bookings` | ✅ | `PATIENT`, `DOCTOR`, or `SUPER_ADMIN` |
 | 21 | GET | `/api/bookings/{id}` | ✅ | Any authenticated |
 | 22 | PATCH | `/api/bookings/{id}/payment` | ✅ | `PATIENT` or `SUPER_ADMIN` |
+| 23 | POST | `/api/hospitals/{id}/license` | ✅ | `HOSPITAL_ADMIN` or `SUPER_ADMIN` |
+| 24 | GET | `/api/hospitals/{id}/license` | ✅ | `HOSPITAL_ADMIN` or `SUPER_ADMIN` |
 
 See `.hermes/plans/2026-06-10_pulse-endpoint-auth-matrix.md` for a detailed breakdown.
 
@@ -531,7 +556,7 @@ jwt.expiration=86400000
 - [ ] Patient appointment history
 - [ ] Doctor dashboard (view/manage appointments)
 - [ ] Admin CRUD endpoints for hospitals, departments, time slots
-- [ ] Swagger / OpenAPI documentation
+- [x] Swagger / OpenAPI documentation
 - [ ] CORS configuration for web + mobile clients
 - [ ] Unit & integration tests
 - [ ] Email notifications & reminders
