@@ -2,6 +2,7 @@ package com.example.demo.service;
 
 import com.example.demo.config.JwtUtil;
 import com.example.demo.dto.*;
+import com.example.demo.config.FileStorageService;
 import com.example.demo.model.*;
 import com.example.demo.repository.*;
 import org.slf4j.Logger;
@@ -9,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -24,19 +26,22 @@ public class HospitalService {
     private final WorkingHoursRepository workingHoursRepository;
     private final JwtUtil jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final FileStorageService fileStorageService;
 
     public HospitalService(HospitalRepository hospitalRepository,
                            HospitalAdminRepository adminRepository,
                            DepartmentRepository departmentRepository,
                            DoctorRepository doctorRepository,
                            WorkingHoursRepository workingHoursRepository,
-                           JwtUtil jwtUtil) {
+                           JwtUtil jwtUtil,
+                           FileStorageService fileStorageService) {
         this.hospitalRepository = hospitalRepository;
         this.adminRepository = adminRepository;
         this.departmentRepository = departmentRepository;
         this.doctorRepository = doctorRepository;
         this.workingHoursRepository = workingHoursRepository;
         this.jwtUtil = jwtUtil;
+        this.fileStorageService = fileStorageService;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -140,6 +145,42 @@ public class HospitalService {
         hospital = hospitalRepository.save(hospital);
 
         log.info("Hospital {} (ID={}) verification: {}", hospital.getName(), hospitalId, status);
+        return toResponse(hospital);
+    }
+
+    // ===== LICENSE DOCUMENT UPLOAD =====
+
+    @Transactional
+    public HospitalResponse uploadLicense(Long hospitalId, MultipartFile file, Long callerAdminId) {
+        Hospital hospital = hospitalRepository.findById(hospitalId)
+                .orElseThrow(() -> new IllegalArgumentException("Hospital not found"));
+
+        // Verify caller is a hospital admin of THIS hospital, or a super admin
+        HospitalAdmin caller = adminRepository.findById(callerAdminId)
+                .orElseThrow(() -> new IllegalArgumentException("Admin not found"));
+
+        boolean isSuperAdmin = caller.getRole() == AdminRole.SUPER_ADMIN;
+        boolean ownsHospital = caller.getHospital() != null
+                && caller.getHospital().getId().equals(hospitalId);
+
+        if (!isSuperAdmin && !ownsHospital) {
+            throw new IllegalArgumentException(
+                    "You don't have permission to upload a license for this hospital");
+        }
+
+        // Delete old file if exists
+        if (hospital.getLicenseDocumentUrl() != null) {
+            fileStorageService.delete(hospital.getLicenseDocumentUrl());
+        }
+
+        // Store new file
+        String fileUrl = fileStorageService.store(file, hospitalId);
+        hospital.setLicenseDocumentUrl(fileUrl);
+        hospital = hospitalRepository.save(hospital);
+
+        log.info("License document uploaded for hospital {} (ID={}): {}",
+                hospital.getName(), hospitalId, fileUrl);
+
         return toResponse(hospital);
     }
 

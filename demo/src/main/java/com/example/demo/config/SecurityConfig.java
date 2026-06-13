@@ -43,6 +43,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Public health check
                 .requestMatchers("/api/hello", "/api/status").permitAll()
+                // Swagger UI / OpenAPI docs (public)
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/scalar/**").permitAll()
                 // Public auth endpoints
                 .requestMatchers("/api/auth/patient/signup", "/api/auth/patient/verify-otp").permitAll()
                 .requestMatchers("/api/auth/patient/login", "/api/auth/doctor/login").permitAll()

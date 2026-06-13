@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import tools.jackson.databind.exc.InvalidFormatException;
 
@@ -60,6 +61,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse> handleMissingParam(MissingServletRequestParameterException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(400, "Missing required parameter: " + ex.getParameterName()));
+    }
+
+    // Missing multipart file part (used for file uploads with @RequestParam)
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse> handleMissingPart(MissingServletRequestPartException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400,
+                        "Missing required file field '" + ex.getRequestPartName()
+                                + "'. Make sure you're sending a multipart/form-data request "
+                                + "with a file field named '" + ex.getRequestPartName() + "'."));
     }
 
     // Type mismatch in path variables or query params (e.g., string instead of Long)
