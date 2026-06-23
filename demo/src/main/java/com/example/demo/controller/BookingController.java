@@ -7,6 +7,9 @@ import com.example.demo.dto.PaymentUpdateRequest;
 import com.example.demo.service.BookingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -28,7 +31,13 @@ public class BookingController {
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<BookingResponse> getBookingSummary(@PathVariable Long id) {
-        return ResponseEntity.ok(bookingService.getBookingSummary(id));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Long authenticatedUserId = (Long) auth.getPrincipal();
+        String role = auth.getAuthorities().stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .orElse("");
+        return ResponseEntity.ok(bookingService.getBookingSummary(id, authenticatedUserId, role));
     }
 
     @PatchMapping("/{id}/payment")

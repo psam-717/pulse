@@ -4,6 +4,9 @@ import com.example.demo.dto.BookingRequest;
 import com.example.demo.dto.BookingResponse;
 import com.example.demo.model.*;
 import com.example.demo.repository.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,8 +37,19 @@ public class BookingService {
         this.patientRepository = patientRepository;
     }
 
+    public Page<Hospital> listHospitals(Pageable pageable) {
+        return hospitalRepository.findAll(pageable);
+    }
+
     public List<Hospital> listHospitals() {
         return hospitalRepository.findAll();
+    }
+
+    public Page<Department> listDepartments(Long hospitalId, Pageable pageable) {
+        if (!hospitalRepository.existsById(hospitalId)) {
+            throw new IllegalArgumentException("Hospital not found");
+        }
+        return departmentRepository.findByHospitalId(hospitalId, pageable);
     }
 
     public List<Department> listDepartments(Long hospitalId) {
@@ -43,6 +57,13 @@ public class BookingService {
             throw new IllegalArgumentException("Hospital not found");
         }
         return departmentRepository.findByHospitalId(hospitalId);
+    }
+
+    public Page<Doctor> listDoctors(Long departmentId, Pageable pageable) {
+        if (!departmentRepository.existsById(departmentId)) {
+            throw new IllegalArgumentException("Department not found");
+        }
+        return doctorRepository.findByDepartmentId(departmentId, pageable);
     }
 
     public List<Doctor> listDoctors(Long departmentId) {
@@ -57,6 +78,16 @@ public class BookingService {
             throw new IllegalArgumentException("Doctor not found");
         }
         return timeSlotRepository.findByDoctorIdAndDateAndIsBooked(doctorId, date, false);
+    }
+
+    public Page<BookingResponse> listPatientBookings(Long patientId, Pageable pageable) {
+        return bookingRepository.findByPatientId(patientId, pageable)
+                .map(this::toResponse);
+    }
+
+    public Page<BookingResponse> listDoctorAppointments(Long doctorId, Pageable pageable) {
+        return bookingRepository.findByDoctorId(doctorId, pageable)
+                .map(this::toResponse);
     }
 
     @Transactional
@@ -110,9 +141,24 @@ public class BookingService {
         return toResponse(booking);
     }
 
-    public BookingResponse getBookingSummary(Long bookingId) {
+    public BookingResponse getBookingSummary(Long bookingId, Long authenticatedUserId, String role) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+
+        // Role-based access control
+        if (!"ROLE_SUPER_ADMIN".equals(role)) {
+            if ("ROLE_PATIENT".equals(role)) {
+                if (!booking.getPatient().getId().equals(authenticatedUserId)) {
+                    throw new AccessDeniedException("You can only view your own bookings");
+                }
+            } else if ("ROLE_DOCTOR".equals(role)) {
+                if (booking.getDoctor() == null || !booking.getDoctor().getId().equals(authenticatedUserId)) {
+                    throw new AccessDeniedException("You can only view your own appointments");
+                }
+            }
+            // HOSPITAL_ADMIN is not scoped to individual bookings
+        }
+
         return toResponse(booking);
     }
 
