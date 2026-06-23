@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.BookingRequest;
 import com.example.demo.dto.BookingResponse;
+import com.example.demo.dto.CancelBookingRequest;
 import com.example.demo.dto.PaymentUpdateRequest;
 import com.example.demo.service.BookingService;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +47,22 @@ public class BookingController {
             @PathVariable Long id,
             @RequestBody PaymentUpdateRequest request) {
         return ResponseEntity.ok(bookingService.updatePaymentStatus(id, request.paymentStatus()));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('PATIENT', 'SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse> cancelBooking(
+            @PathVariable Long id,
+            @RequestBody(required = false) CancelBookingRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Long authenticatedUserId = (Long) auth.getPrincipal();
+        String role = auth.getAuthorities().stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .orElse("");
+        String reason = request != null ? request.reason() : null;
+        bookingService.cancelBooking(id, authenticatedUserId, role, reason);
+        return ResponseEntity.ok(ApiResponse.success("Booking cancelled successfully"));
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
