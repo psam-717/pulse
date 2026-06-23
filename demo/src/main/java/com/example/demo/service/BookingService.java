@@ -91,6 +91,31 @@ public class BookingService {
     }
 
     @Transactional
+    public void cancelBooking(Long bookingId, Long authenticatedUserId, String role, String reason) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+
+        // Ownership check (same pattern as getBookingSummary)
+        if (!"ROLE_SUPER_ADMIN".equals(role)) {
+            if (!booking.getPatient().getId().equals(authenticatedUserId)) {
+                throw new AccessDeniedException("You can only cancel your own bookings");
+            }
+        }
+
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new IllegalStateException("Booking is already cancelled");
+        }
+
+        // Free the time slot
+        booking.getTimeSlot().setBooked(false);
+        timeSlotRepository.save(booking.getTimeSlot());
+
+        booking.setStatus(BookingStatus.CANCELLED);
+        booking.setPaymentStatus(PaymentStatus.REFUNDED);
+        bookingRepository.save(booking);
+    }
+
+    @Transactional
     public BookingResponse createBooking(BookingRequest request) {
         Patient patient = patientRepository.findById(request.patientId())
                 .orElseThrow(() -> new IllegalArgumentException("Patient not found"));
