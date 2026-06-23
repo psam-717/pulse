@@ -116,15 +116,37 @@ public class BookingService {
     }
 
     @Transactional
-    public BookingResponse createBooking(BookingRequest request) {
-        Patient patient = patientRepository.findById(request.patientId())
-                .orElseThrow(() -> new IllegalArgumentException("Patient not found"));
+    public BookingResponse createBooking(BookingRequest request, Long authenticatedUserId, String role) {
+        // Fix #1: Resolve patient from JWT — PATIENT role uses their own ID,
+        // DOCTOR and SUPER_ADMIN can book on behalf of patients via the request
+        Patient patient;
+        if ("ROLE_PATIENT".equals(role)) {
+            patient = patientRepository.findById(authenticatedUserId)
+                    .orElseThrow(() -> new IllegalArgumentException("Patient not found"));
+        } else {
+            // DOCTOR or SUPER_ADMIN must provide a patientId in the request
+            if (request.patientId() == null) {
+                throw new IllegalArgumentException("patientId is required when booking on behalf of a patient");
+            }
+            patient = patientRepository.findById(request.patientId())
+                    .orElseThrow(() -> new IllegalArgumentException("Patient not found"));
+        }
 
         TimeSlot slot = timeSlotRepository.findById(request.timeSlotId())
                 .orElseThrow(() -> new IllegalArgumentException("Time slot not found"));
 
         if (slot.isBooked()) {
             throw new IllegalStateException("This time slot is already booked");
+        }
+
+        // Fix #2: Reject past-date slots
+        if (slot.getDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Cannot book a time slot in the past");
+        }
+
+        // Fix #3: Prevent duplicate booking by same patient for same slot
+        if (bookingRepository.existsByPatientIdAndTimeSlotId(patient.getId(), slot.getId())) {
+            throw new IllegalStateException("You already have a booking for this time slot");
         }
 
         Doctor doctor = slot.getDoctor();

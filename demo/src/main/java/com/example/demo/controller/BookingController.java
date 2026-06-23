@@ -26,7 +26,13 @@ public class BookingController {
     @PostMapping
     @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR', 'SUPER_ADMIN')")
     public ResponseEntity<BookingResponse> createBooking(@RequestBody BookingRequest request) {
-        return ResponseEntity.ok(bookingService.createBooking(request));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Long authenticatedUserId = (Long) auth.getPrincipal();
+        String role = auth.getAuthorities().stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .orElse("");
+        return ResponseEntity.ok(bookingService.createBooking(request, authenticatedUserId, role));
     }
 
     @GetMapping("/{id}")
