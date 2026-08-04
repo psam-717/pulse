@@ -44,6 +44,28 @@ public class JwtUtil {
                 .compact();
     }
 
+    /**
+     * Facility-plane staff token (BACKEND_SPEC.md §2.3) — bound to exactly
+     * one facilityId, carrying the staff role and a plane-specific audience
+     * so facility and platform tokens can be told apart (§2.4).
+     */
+    public String generateStaffToken(Long staffId, Long facilityId, String role) {
+        return Jwts.builder()
+                .subject(staffId.toString())
+                .claim("role", role)
+                .claim("facilityId", facilityId)
+                .claim("aud", "pulse-facility")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(secretKey)
+                .compact();
+    }
+
+    public Long getFacilityId(String token) {
+        Number facilityId = parseToken(token).get("facilityId", Number.class);
+        return facilityId != null ? facilityId.longValue() : null;
+    }
+
     public Claims parseToken(String token) {
         return Jwts.parser()
                 .verifyWith(secretKey)
