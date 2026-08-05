@@ -49,7 +49,7 @@ public class SecurityConfig {
                 // Public auth endpoints
                 .requestMatchers("/api/auth/patient/signup", "/api/auth/patient/verify-otp").permitAll()
                 .requestMatchers("/api/auth/patient/login", "/api/auth/doctor/login").permitAll()
-                .requestMatchers("/api/auth/login").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/login/verify-otp").permitAll()
                 .requestMatchers("/api/auth/admin/**").permitAll()
                 // Hospital registration & login -- public
                 .requestMatchers("/api/hospitals/register", "/api/hospitals/login").permitAll()
