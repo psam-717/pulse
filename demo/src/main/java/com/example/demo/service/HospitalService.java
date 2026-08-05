@@ -221,6 +221,7 @@ public class HospitalService {
                 hospital
         );
         department.setParentDepartment(parent);
+        department.setFacilityId(hospitalId); // keep facility plane in sync
 
         return departmentRepository.save(department);
     }

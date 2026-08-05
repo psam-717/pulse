@@ -1,5 +1,6 @@
 package com.example.demo.config;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,18 +32,28 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
+            try {
+                Claims claims = jwtUtil.parseToken(token);
+                Long userId = Long.parseLong(claims.getSubject());
+                String role = claims.get("role", String.class);
 
-            if (jwtUtil.isTokenValid(token)) {
-                Long userId = jwtUtil.getUserId(token);
-                String role = jwtUtil.getRole(token);
+                // Facility-plane staff tokens carry a facilityId claim; the
+                // filter stores it as the Authentication credentials so
+                // SecurityUtils can enforce the tenant boundary per request.
+                Number facilityIdNum = claims.get("facilityId", Number.class);
+                Long facilityId = facilityIdNum != null ? facilityIdNum.longValue() : null;
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
-                                userId, null, Collections.singletonList(
+                                userId, facilityId, Collections.singletonList(
                                         () -> "ROLE_" + role
                                 )
                         );
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (Exception e) {
+                // Invalid/expired token — leave the context unauthenticated;
+                // the AuthenticationEntryPoint returns a JSON 401.
+                SecurityContextHolder.clearContext();
             }
         }
 

@@ -1,6 +1,7 @@
 package com.example.demo.config;
 
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.exception.ConflictException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -93,6 +94,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse> handleAccessDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error(403, "Access denied. You don't have permission to perform this action."));
+    }
+
+    // Business-rule conflict (e.g. department canDelete gate, queue call-next races)
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiResponse> handleConflict(ConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(409, ex.getMessage()));
     }
 
     // Business logic errors from services

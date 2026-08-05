@@ -53,8 +53,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/admin/**").permitAll()
                 // Hospital registration & login -- public
                 .requestMatchers("/api/hospitals/register", "/api/hospitals/login").permitAll()
-                // Discovery endpoints -- public (GET only)
-                .requestMatchers(HttpMethod.GET, "/api/hospitals/**", "/api/doctors/**", "/api/departments/**").permitAll()
+                // Public mobile discovery (existing): hospital/doctor listing.
+                // The only public department route is the mobile doctor-list
+                // per department (DoctorController); the facility-plane
+                // department/staff APIs below require staff auth.
+                .requestMatchers(HttpMethod.GET, "/api/hospitals/**", "/api/doctors/**",
+                        "/api/departments/*/doctors").permitAll()
+                // Facility-plane (web dashboard) — staff auth required; role
+                // checks are @PreAuthorize on the controllers
+                .requestMatchers("/api/departments/**", "/api/staff/**").authenticated()
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )
