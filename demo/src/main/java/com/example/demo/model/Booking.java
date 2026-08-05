@@ -50,6 +50,15 @@ public class Booking {
 
     private LocalDateTime checkInTime;
 
+    // ===== Facility-plane (web dashboard) fields =====
+    // Appointment status state machine (BACKEND_SPEC §7.1) — the legacy
+    // patient-facing status stays in `status`; this column tracks the
+    // facility-plane lifecycle (checked_in/completed/no_show).
+    private String appointmentStatus;
+
+    /** emergency | urgent | routine — patient-facing booking priority; default routine. */
+    private String priority = "routine";
+
     public Booking() {}
 
     public Booking(Patient patient, Doctor doctor, Department department, Hospital hospital,
@@ -101,4 +110,10 @@ public class Booking {
 
     public LocalDateTime getCheckInTime() { return checkInTime; }
     public void setCheckInTime(LocalDateTime checkInTime) { this.checkInTime = checkInTime; }
+
+    public String getAppointmentStatus() { return appointmentStatus; }
+    public void setAppointmentStatus(String appointmentStatus) { this.appointmentStatus = appointmentStatus; }
+
+    public String getPriority() { return priority; }
+    public void setPriority(String priority) { this.priority = priority; }
 }
