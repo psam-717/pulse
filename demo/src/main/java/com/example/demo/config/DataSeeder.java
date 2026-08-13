@@ -381,28 +381,29 @@ public class DataSeeder implements CommandLineRunner {
         Patient kofi = ensurePatient("Kofi", "Asante", Gender.MALE, "+233 24 000 0002", "kofi.asante@pulsehealth.test");
         Patient efua = ensurePatient("Efua", "Gyasi", Gender.FEMALE, "+233 24 000 0003", "efua.gyasi@pulsehealth.test");
 
-        List<Doctor> doctors = doctorRepository.findAll().stream()
-                .filter(d -> d.getHospital() != null && facilityId.equals(d.getHospital().getId()))
-                .limit(3)
-                .toList();
-        if (doctors.isEmpty()) {
-            return;
-        }
+        // The facility-plane doctor (staff "Dr. Owusu") also needs a legacy
+        // Doctor row — the web workspace filters appointments by
+        // doctorName === session.name, and bookings attach to legacy doctors.
+        ensureLegacyDoctorOwusu(facility);
 
         java.time.LocalDate today = java.time.LocalDate.now();
-        // phone, startTime, bookingStatus, paymentStatus
+        // phone, startTime, bookingStatus, paymentStatus, doctorEmail
         String[][] plan = {
-                {"+233 24 000 0001", "09:00", "CONFIRMED", "PAID"},
-                {"+233 24 000 0002", "10:00", "CONFIRMED", "PAID"},
-                {"+233 24 000 0003", "11:00", "PENDING_PAYMENT", "PENDING"},
-                {"+233 24 000 0001", "12:00", "CANCELLED", "REFUNDED"},
+                {"+233 24 000 0001", "09:00", "CONFIRMED", "PAID", "owusu@pulsehealth.test"},
+                {"+233 24 000 0002", "10:00", "CONFIRMED", "PAID", "owusu@pulsehealth.test"},
+                {"+233 24 000 0003", "11:00", "PENDING_PAYMENT", "PENDING", "akua.mensah@korlebu.gov.gh"},
+                {"+233 24 000 0001", "12:00", "CANCELLED", "PENDING", "owusu@pulsehealth.test"},
         };
-        for (int i = 0; i < plan.length; i++) {
-            String[] row = plan[i];
-            Patient patient = row[0].equals(ama.getPhone()) ? ama
-                    : row[0].equals(kofi.getPhone()) ? kofi : efua;
-            Doctor doctor = doctors.get(i % doctors.size());
-            TimeSlot slot = ensureSlot(doctor, today, java.time.LocalTime.parse(row[1]));
+        for (String[] row : plan) {
+            String[] r = row;
+            Patient patient = r[0].equals(ama.getPhone()) ? ama
+                    : r[0].equals(kofi.getPhone()) ? kofi : efua;
+            Doctor doctor = doctorRepository.findAll().stream()
+                    .filter(d -> r[4].equals(d.getEmail()))
+                    .findFirst()
+                    .orElse(null);
+            if (doctor == null) continue;
+            TimeSlot slot = ensureSlot(doctor, today, java.time.LocalTime.parse(r[1]));
             if (slot == null) continue;
             if (bookingRepository.existsByPatientIdAndTimeSlotId(patient.getId(), slot.getId())) continue;
 
@@ -415,8 +416,8 @@ public class DataSeeder implements CommandLineRunner {
 
             Booking booking = new Booking(patient, doctor, dept, facility,
                     slot, dept.getConsultationFee());
-            booking.setStatus(BookingStatus.valueOf(row[2]));
-            booking.setPaymentStatus(PaymentStatus.valueOf(row[3]));
+            booking.setStatus(BookingStatus.valueOf(r[2]));
+            booking.setPaymentStatus(PaymentStatus.valueOf(r[3]));
             bookingRepository.save(booking);
         }
         log.info("✅ Demo bookings ensured for today ({} total)", bookingRepository.count());
@@ -507,6 +508,28 @@ public class DataSeeder implements CommandLineRunner {
         }
         log.info("✅ Demo patients ({}) + queue entries ({}) ensured",
                 patientRepository.count(), queueEntryRepository.count());
+    }
+
+    /**
+     * Legacy Doctor row for the facility-plane staff "Dr. Owusu" — the web
+     * workspace filters appointments by doctorName === session.name, and
+     * bookings attach to legacy doctors, so the same person needs both rows.
+     * Idempotent by email.
+     */
+    private Doctor ensureLegacyDoctorOwusu(Hospital facility) {
+        return doctorRepository.findAll().stream()
+                .filter(d -> "owusu@pulsehealth.test".equals(d.getEmail()))
+                .findFirst()
+                .orElseGet(() -> {
+                    Department cardio = departmentRepository.findByFacilityId(facility.getId())
+                            .stream().filter(d -> "Cardiology".equals(d.getName()))
+                            .findFirst().orElse(null);
+                    Doctor doc = new Doctor("Dr.", "Owusu", "Interventional Cardiology",
+                            "owusu@pulsehealth.test", "+233 501 111 099", "GC-2024-099",
+                            "CARDIO-DOC-099", passwordEncoder.encode("admin123"),
+                            facility, cardio);
+                    return doctorRepository.save(doc);
+                });
     }
 
     private Patient ensurePatient(String firstName, String lastName, Gender gender,
