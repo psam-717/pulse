@@ -5,11 +5,16 @@ import com.example.demo.model.Doctor;
 import com.example.demo.model.Hospital;
 import com.example.demo.model.HospitalAdmin;
 import com.example.demo.model.AdminRole;
+import com.example.demo.model.StaffAccountStatus;
+import com.example.demo.model.StaffDutyStatus;
+import com.example.demo.model.StaffMember;
+import com.example.demo.model.StaffRole;
 import com.example.demo.model.TimeSlot;
 import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.DoctorRepository;
 import com.example.demo.repository.HospitalAdminRepository;
 import com.example.demo.repository.HospitalRepository;
+import com.example.demo.repository.StaffMemberRepository;
 import com.example.demo.repository.TimeSlotRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,18 +32,21 @@ public class DataSeeder implements CommandLineRunner {
     private final DoctorRepository doctorRepository;
     private final HospitalAdminRepository adminRepository;
     private final TimeSlotRepository timeSlotRepository;
+    private final StaffMemberRepository staffMemberRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public DataSeeder(HospitalRepository hospitalRepository,
                       DepartmentRepository departmentRepository,
                       DoctorRepository doctorRepository,
                       HospitalAdminRepository adminRepository,
-                      TimeSlotRepository timeSlotRepository) {
+                      TimeSlotRepository timeSlotRepository,
+                      StaffMemberRepository staffMemberRepository) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
         this.doctorRepository = doctorRepository;
         this.adminRepository = adminRepository;
         this.timeSlotRepository = timeSlotRepository;
+        this.staffMemberRepository = staffMemberRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -48,6 +56,7 @@ public class DataSeeder implements CommandLineRunner {
         if (hospitalRepository.count() > 0) {
             ensureSuperAdminExists();
             seedTimeSlotsIfEmpty();
+            ensureStaffExist();
             log.info("Database already seeded — skipping");
             return;
         }
@@ -149,6 +158,9 @@ public class DataSeeder implements CommandLineRunner {
         ));
         log.info("✅ Super admin created: superadmin@pulse.gh / superadmin123");
         log.info("🔑 Doctor password: admin123");
+
+        // Facility-plane staff demo accounts (web dashboard login)
+        ensureStaffExist();
     }
 
     private void ensureSuperAdminExists() {
@@ -191,5 +203,38 @@ public class DataSeeder implements CommandLineRunner {
             }
         }
         log.info("✅ Seeded {} time slots", slotsGenerated);
+    }
+
+    /**
+     * Facility-plane staff demo accounts (web dashboard login). Matches the
+     * frontend's demo sessions in lib/mock/auth.ts so the mock hint on the
+     * login page works against the real backend: Password123! for both.
+     */
+    private void ensureStaffExist() {
+        if (staffMemberRepository.count() > 0) {
+            return;
+        }
+        Long facilityId = hospitalRepository.findAll().stream()
+                .map(Hospital::getId)
+                .findFirst()
+                .orElse(1L);
+
+        String staffPassword = passwordEncoder.encode("Password123!");
+
+        staffMemberRepository.save(new StaffMember(
+                "Sarah Jenkins", StaffRole.ADMIN, "Chief Administrator", null,
+                "general-medicine", "General Medicine",
+                "sarah.jenkins@knust-hospital.test", "+233 500 111 001",
+                "09:00", "17:00", StaffDutyStatus.ON_DUTY, StaffAccountStatus.ACTIVE,
+                null, facilityId, staffPassword));
+
+        staffMemberRepository.save(new StaffMember(
+                "Dr. Owusu", StaffRole.DOCTOR, "Cardiologist", "Interventional Cardiology",
+                "cardiology", "Cardiology",
+                "owusu@pulsehealth.test", "+233 500 111 002",
+                "08:00", "16:00", StaffDutyStatus.ON_DUTY, StaffAccountStatus.ACTIVE,
+                null, facilityId, staffPassword));
+
+        log.info("✅ Seeded staff: sarah.jenkins@knust-hospital.test / owusu@pulsehealth.test (Password123!)");
     }
 }
