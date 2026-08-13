@@ -9,7 +9,11 @@ import com.example.demo.model.Hospital;
 import com.example.demo.model.HospitalAdmin;
 import com.example.demo.model.AdminRole;
 import com.example.demo.model.Patient;
+import com.example.demo.model.PatientSource;
 import com.example.demo.model.PaymentStatus;
+import com.example.demo.model.QueueEntry;
+import com.example.demo.model.QueuePriority;
+import com.example.demo.model.QueueStatus;
 import com.example.demo.model.StaffAccountStatus;
 import com.example.demo.model.StaffDutyStatus;
 import com.example.demo.model.StaffMember;
@@ -21,6 +25,7 @@ import com.example.demo.repository.DoctorRepository;
 import com.example.demo.repository.HospitalAdminRepository;
 import com.example.demo.repository.HospitalRepository;
 import com.example.demo.repository.PatientRepository;
+import com.example.demo.repository.QueueEntryRepository;
 import com.example.demo.repository.StaffMemberRepository;
 import com.example.demo.repository.TimeSlotRepository;
 import org.slf4j.Logger;
@@ -30,6 +35,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 @Component
 public class DataSeeder implements CommandLineRunner {
@@ -44,6 +50,7 @@ public class DataSeeder implements CommandLineRunner {
     private final StaffMemberRepository staffMemberRepository;
     private final PatientRepository patientRepository;
     private final BookingRepository bookingRepository;
+    private final QueueEntryRepository queueEntryRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
 
@@ -55,6 +62,7 @@ public class DataSeeder implements CommandLineRunner {
                       StaffMemberRepository staffMemberRepository,
                       PatientRepository patientRepository,
                       BookingRepository bookingRepository,
+                      QueueEntryRepository queueEntryRepository,
                       org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
@@ -64,6 +72,7 @@ public class DataSeeder implements CommandLineRunner {
         this.staffMemberRepository = staffMemberRepository;
         this.patientRepository = patientRepository;
         this.bookingRepository = bookingRepository;
+        this.queueEntryRepository = queueEntryRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
@@ -411,6 +420,93 @@ public class DataSeeder implements CommandLineRunner {
             bookingRepository.save(booking);
         }
         log.info("✅ Demo bookings ensured for today ({} total)", bookingRepository.count());
+
+        ensureDemoPatientsAndQueue();
+    }
+
+    /**
+     * Demo patient directory + live queue, mirroring the frontend mocks
+     * (lib/mock/patients.ts, lib/mock/queue.ts) so the doctor workspace and
+     * dashboard render real-looking data. Idempotent by phone/ticket.
+     */
+    private void ensureDemoPatientsAndQueue() {
+        Hospital facility = hospitalRepository.findAll().stream().findFirst().orElse(null);
+        if (facility == null) return;
+
+        // [phone, first, last, gender, dob, patientNumber, bloodType, allergies, medsJson, vitalsJson]
+        String[][] patients = {
+                {"+233 24 111 0001", "Kwame", "Mensah", "MALE", "1985-03-14", "PT-00101", "O+", "penicillin",
+                        "[{\"name\":\"Lisinopril\",\"dose\":\"10mg\",\"frequency\":\"Once daily\"}]",
+                        "{\"bloodPressure\":\"128/82\",\"temperature\":\"36.8°C\",\"pulse\":\"74 bpm\",\"weight\":\"82 kg\",\"recordedAt\":\"2026-08-05T08:40\"}"},
+                {"+233 24 111 0002", "Abena", "Asante", "FEMALE", "1992-07-22", "PT-00102", "A+", "",
+                        "[]", null},
+                {"+233 24 111 0003", "Kwabena", "Ofori", "MALE", "1978-11-02", "PT-00103", "B+", "aspirin",
+                        "[]", null},
+                {"+233 24 111 0004", "Yaw", "Darko", "MALE", "1969-01-30", "PT-00104", "O-", "",
+                        "[{\"name\":\"Metformin\",\"dose\":\"500mg\",\"frequency\":\"Twice daily\"}]",
+                        "{\"bloodPressure\":\"142/90\",\"temperature\":\"37.1°C\",\"pulse\":\"80 bpm\",\"weight\":\"88 kg\",\"recordedAt\":\"2026-08-05T08:55\"}"},
+                {"+233 24 111 0005", "Ama", "Owusu", "FEMALE", "1995-09-18", "PT-00105", "AB+", "sulfa drugs",
+                        "[]", null},
+                {"+233 24 111 0006", "Kofi", "Antwi", "MALE", "1988-05-09", "PT-00106", "A-", "",
+                        "[]", null},
+                {"+233 24 111 0007", "Adwoa", "Sarpong", "FEMALE", "2001-12-25", "PT-00107", "B-", "",
+                        "[]", null},
+                {"+233 24 111 0008", "Esi", "Mensah", "FEMALE", "1982-04-11", "PT-00108", "O+", "penicillin",
+                        "[]", "{\"bloodPressure\":\"118/76\",\"temperature\":\"36.6°C\",\"pulse\":\"68 bpm\",\"weight\":\"61 kg\",\"recordedAt\":\"2026-08-05T09:05\"}"},
+                {"+233 24 111 0009", "Kojo", "Asare", "MALE", "1974-08-03", "PT-00109", "A+", "",
+                        "[{\"name\":\"Atorvastatin\",\"dose\":\"20mg\",\"frequency\":\"Once nightly\"}]", null},
+                {"+233 24 111 0010", "Akua", "Frimpong", "FEMALE", "1998-06-27", "PT-00110", "O+", "",
+                        "[]", null},
+        };
+
+        for (String[] row : patients) {
+            String phone = row[0];
+            Patient p = patientRepository.findByPhone(phone).orElse(null);
+            if (p == null) {
+                p = new Patient(row[1], row[2],
+                        java.time.LocalDate.parse(row[4]),
+                        Gender.valueOf(row[3]),
+                        row[1].toLowerCase() + "." + row[2].toLowerCase() + "@pulsehealth.test",
+                        phone, "Kumasi, Ghana",
+                        "GHA-00000000" + (phone.endsWith("10") ? "0" : phone.substring(phone.length() - 1)),
+                        passwordEncoder.encode("patient123"));
+            }
+            p.setPatientNumber(row[5]);
+            p.setBloodType(row[6]);
+            p.setAllergies(row[7].isEmpty() ? null : row[7]);
+            p.setCurrentMedications(row[8]);
+            p.setLatestVitals(row[9]);
+            patientRepository.save(p);
+        }
+
+        // [ticket, patientName, deptId, status, priority, source, minutesAgo, calledMinAgo, clinician, room]
+        String[][] queue = {
+                {"C-001", "Kwame Mensah", "1", "IN_CONSULTATION", "ROUTINE", "APPOINTMENT", "28", "9", "Dr. Owusu", "Room 2"},
+                {"C-002", "Abena Asante", "1", "WAITING", "URGENT", "WALK_IN", "22", null, null, null},
+                {"C-003", "Yaw Darko", "1", "WAITING", "ROUTINE", "APPOINTMENT", "15", null, null, null},
+                {"C-004", "Esi Boateng", "1", "WAITING", "ROUTINE", "WALK_IN", "6", null, null, null},
+                {"E-001", "Nana Acheampong", "12", "IN_CONSULTATION", "EMERGENCY", "WALK_IN", "18", "12", "Dr. Mensima", "Bay 1"},
+                {"E-002", "Adwoa Sarpong", "12", "WAITING", "EMERGENCY", "WALK_IN", "44", null, null, null},
+                {"E-003", "Kwabena Osei", "12", "WAITING", "URGENT", "WALK_IN", "20", null, null, null},
+                {"G-001", "Efua Tetteh", "13", "IN_CONSULTATION", "ROUTINE", "APPOINTMENT", "16", "5", "Dr. Boateng", "Room 8"},
+                {"G-002", "Yaa Agyeman", "13", "WAITING", "ROUTINE", "APPOINTMENT", "9", null, null, null},
+                {"G-003", "Kwesi Appiah", "13", "WAITING", "ROUTINE", "WALK_IN", "3", null, null, null},
+        };
+        for (String[] row : queue) {
+            if (queueEntryRepository.findByTicketNumber(row[0]).isPresent()) continue;
+            QueueEntry e = new QueueEntry(row[0], row[1], row[2],
+                    QueuePriority.valueOf(row[4]), PatientSource.valueOf(row[5]),
+                    LocalDateTime.now().minusMinutes(Long.parseLong(row[6])));
+            e.setStatus(QueueStatus.valueOf(row[3]));
+            if (row[7] != null && !row[7].isBlank()) {
+                e.setCalledAt(LocalDateTime.now().minusMinutes(Long.parseLong(row[7])));
+            }
+            e.setClinician(row[8]);
+            e.setRoom(row[9]);
+            queueEntryRepository.save(e);
+        }
+        log.info("✅ Demo patients ({}) + queue entries ({}) ensured",
+                patientRepository.count(), queueEntryRepository.count());
     }
 
     private Patient ensurePatient(String firstName, String lastName, Gender gender,

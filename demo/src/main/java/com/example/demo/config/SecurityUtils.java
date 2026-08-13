@@ -44,4 +44,14 @@ public final class SecurityUtils {
         }
         return facilityId;
     }
+
+    /** Like {@link #currentStaffId()} but throws 403 when absent. */
+    public static Long requireStaffId() {
+        Long staffId = currentStaffId();
+        if (staffId == null) {
+            throw new AccessDeniedException(
+                    "Staff identity required — this endpoint needs a staff token");
+        }
+        return staffId;
+    }
 }
