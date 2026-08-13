@@ -10,4 +10,7 @@ import java.util.Optional;
 public interface PatientRepository extends JpaRepository<Patient, Long> {
     Optional<Patient> findByPhone(String phone);
     Optional<Patient> findByGhanaCard(String ghanaCard);
+
+    /** Highest human-facing number so far — for PT-xxxxx generation. */
+    Optional<Patient> findTopByPatientNumberNotNullOrderByPatientNumberDesc();
 }
