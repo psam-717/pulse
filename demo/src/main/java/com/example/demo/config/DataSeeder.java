@@ -56,7 +56,7 @@ public class DataSeeder implements CommandLineRunner {
         if (hospitalRepository.count() > 0) {
             ensureSuperAdminExists();
             seedTimeSlotsIfEmpty();
-            ensureStaffExist();
+            ensureFacilityDemoData();
             log.info("Database already seeded — skipping");
             return;
         }
@@ -159,8 +159,8 @@ public class DataSeeder implements CommandLineRunner {
         log.info("✅ Super admin created: superadmin@pulse.gh / superadmin123");
         log.info("🔑 Doctor password: admin123");
 
-        // Facility-plane staff demo accounts (web dashboard login)
-        ensureStaffExist();
+        // Facility-plane demo accounts + departments (web dashboard login)
+        ensureFacilityDemoData();
     }
 
     private void ensureSuperAdminExists() {
@@ -206,35 +206,117 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     /**
-     * Facility-plane staff demo accounts (web dashboard login). Matches the
-     * frontend's demo sessions in lib/mock/auth.ts so the mock hint on the
-     * login page works against the real backend: Password123! for both.
+     * Facility-plane demo data (web dashboard). Idempotent and self-healing:
+     * 1. Backfills department.facilityId from the legacy hospital link.
+     * 2. Ensures the six demo departments exist for the first facility.
+     * 3. Repairs staff departmentId values seeded pre-Phase-2 (name strings
+     *    → real numeric ids).
+     * 4. Ensures a demo staff roster (matches the frontend mock's demo
+     *    identities; password Password123! for all, dev only).
      */
-    private void ensureStaffExist() {
-        if (staffMemberRepository.count() > 0) {
+    private void ensureFacilityDemoData() {
+        Hospital facility = hospitalRepository.findAll().stream().findFirst().orElse(null);
+        if (facility == null) {
             return;
         }
-        Long facilityId = hospitalRepository.findAll().stream()
-                .map(Hospital::getId)
-                .findFirst()
-                .orElse(1L);
+        Long facilityId = facility.getId();
 
+        // 1. Backfill department facilityIds from the legacy hospital link
+        for (Department d : departmentRepository.findAll()) {
+            if (d.getFacilityId() == null && d.getHospital() != null) {
+                d.setFacilityId(d.getHospital().getId());
+                departmentRepository.save(d);
+            }
+        }
+
+        // 2. Demo departments (by name, by abbreviation)
+        String[][] demoDepts = {
+                {"Cardiology", "CARD", "Heart and cardiovascular care", "08:00", "17:00", "false", "3"},
+                {"Emergency", "EMG", "Acute and emergency care", "00:00", "23:59", "true", "5"},
+                {"General Medicine", "GEN", "Outpatient general consultation", "08:00", "17:00", "false", "4"},
+                {"Maternity", "MAT", "Antenatal, delivery and postnatal care", "00:00", "23:59", "true", "3"},
+                {"Pediatrics", "PEDS", "Child and infant health", "08:00", "16:00", "false", "2"},
+                {"Laboratory", "LAB", "Diagnostics and sample processing", "08:00", "15:00", "false", "2"},
+        };
+        for (String[] d : demoDepts) {
+            if (!departmentRepository.existsByNameAndFacilityId(d[0], facilityId)
+                    && departmentRepository.findByAbbreviation(d[1]).isEmpty()) {
+                Department dept = new Department(
+                        d[0], d[1], d[2], new java.math.BigDecimal("300.00"), facility);
+                dept.setFacilityId(facilityId);
+                dept.setStatus("active");
+                dept.setRooms(Integer.parseInt(d[6]));
+                dept.setOpensAt(d[3]);
+                dept.setClosesAt(d[4]);
+                dept.setTwentyFourSeven(Boolean.parseBoolean(d[5]));
+                departmentRepository.save(dept);
+            }
+        }
+
+        // 3. Repair staff departmentId values seeded pre-Phase-2
+        for (StaffMember s : staffMemberRepository.findAll()) {
+            if (s.getDepartmentId() == null || s.getDepartmentId().isEmpty()) continue;
+            try {
+                Long.parseLong(s.getDepartmentId());
+                continue; // already numeric
+            } catch (NumberFormatException ignored) {
+                // fall through — name string from the Phase-1 seed
+            }
+            departmentRepository.findByFacilityId(facilityId).stream()
+                    .filter(d -> d.getName().equalsIgnoreCase(s.getDepartmentId())
+                            || d.getName().equalsIgnoreCase(s.getDepartmentName()))
+                    .findFirst()
+                    .ifPresent(d -> {
+                        s.setDepartmentId(String.valueOf(d.getId()));
+                        s.setDepartmentName(d.getName());
+                        staffMemberRepository.save(s);
+                    });
+        }
+
+        // 4. Demo staff roster (by email; password Password123! for all)
         String staffPassword = passwordEncoder.encode("Password123!");
-
-        staffMemberRepository.save(new StaffMember(
-                "Sarah Jenkins", StaffRole.ADMIN, "Chief Administrator", null,
-                "general-medicine", "General Medicine",
-                "sarah.jenkins@knust-hospital.test", "+233 500 111 001",
-                "09:00", "17:00", StaffDutyStatus.ON_DUTY, StaffAccountStatus.ACTIVE,
-                null, facilityId, staffPassword));
-
-        staffMemberRepository.save(new StaffMember(
-                "Dr. Owusu", StaffRole.DOCTOR, "Cardiologist", "Interventional Cardiology",
-                "cardiology", "Cardiology",
-                "owusu@pulsehealth.test", "+233 500 111 002",
-                "08:00", "16:00", StaffDutyStatus.ON_DUTY, StaffAccountStatus.ACTIVE,
-                null, facilityId, staffPassword));
-
-        log.info("✅ Seeded staff: sarah.jenkins@knust-hospital.test / owusu@pulsehealth.test (Password123!)");
+        String[][] demoStaff = {
+                // name, role, title, specialty, departmentName
+                {"Sarah Jenkins", "ADMIN", "Chief Administrator", "", "General Medicine"},
+                {"Dr. Owusu", "DOCTOR", "Cardiologist", "Interventional Cardiology", "Cardiology"},
+                {"Dr. Kusi", "DOCTOR", "Cardiologist", "Electrophysiology", "Cardiology"},
+                {"Nurse Affum", "NURSE", "Senior Nurse", "", "Cardiology"},
+                {"Dr. Boateng", "DOCTOR", "General Practitioner", "Internal Medicine", "General Medicine"},
+                {"Adwoa Boateng", "FRONT_DESK", "Front Desk", "", "General Medicine"},
+                {"Dr. Mensima", "DOCTOR", "Emergency Physician", "Trauma Medicine", "Emergency"},
+                {"Nurse Acheampong", "NURSE", "Charge Nurse", "", "Emergency"},
+        };
+        String[] demoEmails = {
+                "sarah.jenkins@knust-hospital.test",
+                "owusu@pulsehealth.test",
+                "kusi@pulsehealth.test",
+                "affum@pulsehealth.test",
+                "boateng@pulsehealth.test",
+                "adwoa@pulsehealth.test",
+                "mensima@pulsehealth.test",
+                "acheampong@pulsehealth.test",
+        };
+        for (int i = 0; i < demoStaff.length; i++) {
+            String email = demoEmails[i];
+            if (staffMemberRepository.existsByEmail(email)) continue;
+            String[] s = demoStaff[i];
+            String deptName = s[4];
+            String deptId = departmentRepository.findByFacilityId(facilityId).stream()
+                    .filter(d -> d.getName().equalsIgnoreCase(deptName))
+                    .map(d -> String.valueOf(d.getId()))
+                    .findFirst()
+                    .orElse("");
+            staffMemberRepository.save(new StaffMember(
+                    s[0], StaffRole.valueOf(s[1]), s[2],
+                    s[3].isEmpty() ? null : s[3],
+                    deptId, deptName,
+                    email, "+233 500 111 001",
+                    "08:00", "17:00",
+                    StaffDutyStatus.ON_DUTY, StaffAccountStatus.ACTIVE,
+                    null, facilityId, staffPassword));
+        }
+        log.info("✅ Facility demo data ensured for facility {} ({} departments, {} staff)",
+                facilityId, departmentRepository.findByFacilityId(facilityId).size(),
+                staffMemberRepository.findByFacilityId(facilityId).size());
     }
 }
