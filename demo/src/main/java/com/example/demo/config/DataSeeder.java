@@ -1,19 +1,26 @@
 package com.example.demo.config;
 
+import com.example.demo.model.Booking;
+import com.example.demo.model.BookingStatus;
 import com.example.demo.model.Department;
 import com.example.demo.model.Doctor;
+import com.example.demo.model.Gender;
 import com.example.demo.model.Hospital;
 import com.example.demo.model.HospitalAdmin;
 import com.example.demo.model.AdminRole;
+import com.example.demo.model.Patient;
+import com.example.demo.model.PaymentStatus;
 import com.example.demo.model.StaffAccountStatus;
 import com.example.demo.model.StaffDutyStatus;
 import com.example.demo.model.StaffMember;
 import com.example.demo.model.StaffRole;
 import com.example.demo.model.TimeSlot;
+import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.DoctorRepository;
 import com.example.demo.repository.HospitalAdminRepository;
 import com.example.demo.repository.HospitalRepository;
+import com.example.demo.repository.PatientRepository;
 import com.example.demo.repository.StaffMemberRepository;
 import com.example.demo.repository.TimeSlotRepository;
 import org.slf4j.Logger;
@@ -21,6 +28,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class DataSeeder implements CommandLineRunner {
@@ -33,6 +42,9 @@ public class DataSeeder implements CommandLineRunner {
     private final HospitalAdminRepository adminRepository;
     private final TimeSlotRepository timeSlotRepository;
     private final StaffMemberRepository staffMemberRepository;
+    private final PatientRepository patientRepository;
+    private final BookingRepository bookingRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public DataSeeder(HospitalRepository hospitalRepository,
@@ -40,18 +52,25 @@ public class DataSeeder implements CommandLineRunner {
                       DoctorRepository doctorRepository,
                       HospitalAdminRepository adminRepository,
                       TimeSlotRepository timeSlotRepository,
-                      StaffMemberRepository staffMemberRepository) {
+                      StaffMemberRepository staffMemberRepository,
+                      PatientRepository patientRepository,
+                      BookingRepository bookingRepository,
+                      org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
         this.doctorRepository = doctorRepository;
         this.adminRepository = adminRepository;
         this.timeSlotRepository = timeSlotRepository;
         this.staffMemberRepository = staffMemberRepository;
+        this.patientRepository = patientRepository;
+        this.bookingRepository = bookingRepository;
+        this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     @Override
     public void run(String... args) {
+        ensureConstraintRepair();
         // Only seed if no data exists yet
         if (hospitalRepository.count() > 0) {
             ensureSuperAdminExists();
@@ -161,6 +180,23 @@ public class DataSeeder implements CommandLineRunner {
 
         // Facility-plane demo accounts + departments (web dashboard login)
         ensureFacilityDemoData();
+    }
+
+    /**
+     * Drops stale CHECK constraints on enums. PostgreSQL CHECK constraints
+     * are NOT updated by Hibernate's ddl-auto=update — the ones created when
+     * PaymentStatus/BookingStatus had fewer values still block new enum
+     * values (e.g. REFUNDED) with a runtime constraint violation. Enum
+     * validation belongs to the Java layer, so the constraints are dropped.
+     */
+    private void ensureConstraintRepair() {
+        try {
+            jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_payment_status_check");
+            jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check");
+            log.info("✅ Repaired stale booking CHECK constraints (bookings_payment_status_check / bookings_status_check)");
+        } catch (Exception e) {
+            log.warn("Booking constraint repair skipped: {}", e.getMessage());
+        }
     }
 
     private void ensureSuperAdminExists() {
@@ -318,5 +354,83 @@ public class DataSeeder implements CommandLineRunner {
         log.info("✅ Facility demo data ensured for facility {} ({} departments, {} staff)",
                 facilityId, departmentRepository.findByFacilityId(facilityId).size(),
                 staffMemberRepository.findByFacilityId(facilityId).size());
+
+        ensureDemoBookings();
+    }
+
+    /**
+     * Demo patients + today's bookings so the web Appointments page has real
+     * data (the mobile booking IS the facility appointment — D4). Idempotent
+     * by phone + patient/slot pair.
+     */
+    private void ensureDemoBookings() {
+        Hospital facility = hospitalRepository.findAll().stream().findFirst().orElse(null);
+        if (facility == null) return;
+        Long facilityId = facility.getId();
+
+        Patient ama = ensurePatient("Ama", "Serwaa", Gender.FEMALE, "+233 24 000 0001", "ama.serwaa@pulsehealth.test");
+        Patient kofi = ensurePatient("Kofi", "Asante", Gender.MALE, "+233 24 000 0002", "kofi.asante@pulsehealth.test");
+        Patient efua = ensurePatient("Efua", "Gyasi", Gender.FEMALE, "+233 24 000 0003", "efua.gyasi@pulsehealth.test");
+
+        List<Doctor> doctors = doctorRepository.findAll().stream()
+                .filter(d -> d.getHospital() != null && facilityId.equals(d.getHospital().getId()))
+                .limit(3)
+                .toList();
+        if (doctors.isEmpty()) {
+            return;
+        }
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        // phone, startTime, bookingStatus, paymentStatus
+        String[][] plan = {
+                {"+233 24 000 0001", "09:00", "CONFIRMED", "PAID"},
+                {"+233 24 000 0002", "10:00", "CONFIRMED", "PAID"},
+                {"+233 24 000 0003", "11:00", "PENDING_PAYMENT", "PENDING"},
+                {"+233 24 000 0001", "12:00", "CANCELLED", "REFUNDED"},
+        };
+        for (int i = 0; i < plan.length; i++) {
+            String[] row = plan[i];
+            Patient patient = row[0].equals(ama.getPhone()) ? ama
+                    : row[0].equals(kofi.getPhone()) ? kofi : efua;
+            Doctor doctor = doctors.get(i % doctors.size());
+            TimeSlot slot = ensureSlot(doctor, today, java.time.LocalTime.parse(row[1]));
+            if (slot == null) continue;
+            if (bookingRepository.existsByPatientIdAndTimeSlotId(patient.getId(), slot.getId())) continue;
+
+            // Resolve the department through the repository — the entity's
+            // lazy proxy can't be initialized outside a transaction.
+            Long deptId = doctor.getDepartment() != null ? doctor.getDepartment().getId() : null;
+            Department dept = deptId != null
+                    ? departmentRepository.findById(deptId).orElse(null) : null;
+            if (dept == null) continue;
+
+            Booking booking = new Booking(patient, doctor, dept, facility,
+                    slot, dept.getConsultationFee());
+            booking.setStatus(BookingStatus.valueOf(row[2]));
+            booking.setPaymentStatus(PaymentStatus.valueOf(row[3]));
+            bookingRepository.save(booking);
+        }
+        log.info("✅ Demo bookings ensured for today ({} total)", bookingRepository.count());
+    }
+
+    private Patient ensurePatient(String firstName, String lastName, Gender gender,
+                                  String phone, String email) {
+        return patientRepository.findByPhone(phone).orElseGet(() -> {
+            Patient p = new Patient(firstName, lastName,
+                    java.time.LocalDate.of(1990, 1, 1), gender, email, phone,
+                    "Kumasi", "GHA-000000000-" + (phone.endsWith("1") ? "1" : phone.endsWith("2") ? "2" : "3"),
+                    passwordEncoder.encode("patient123"));
+            return patientRepository.save(p);
+        });
+    }
+
+    /** Returns an existing or freshly created slot for the doctor at the given time today. */
+    private TimeSlot ensureSlot(Doctor doctor, java.time.LocalDate date, java.time.LocalTime start) {
+        for (TimeSlot slot : timeSlotRepository.findByDoctorIdAndDateAndIsBooked(doctor.getId(), date, false)) {
+            if (start.equals(slot.getStartTime())) {
+                return slot;
+            }
+        }
+        return timeSlotRepository.save(new TimeSlot(doctor, date, start, start.plusMinutes(20)));
     }
 }

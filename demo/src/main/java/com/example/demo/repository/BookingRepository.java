@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -20,4 +21,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     // Department.appointmentsToday — BACKEND_SPEC §5.3 [server-only])
     List<Booking> findByDepartmentIdAndBookingDateBetween(
             Long departmentId, LocalDateTime start, LocalDateTime end);
+
+    // Appointment-plane queries — the appointment date is the time slot's
+    // date (BACKEND_SPEC §6.1: GET /appointments dispatches on which of
+    // date / from+to is present)
+    List<Booking> findByTimeSlot_Date(LocalDate date);
+
+    List<Booking> findByTimeSlot_DateAndDepartmentId(LocalDate date, Long departmentId);
+
+    List<Booking> findByTimeSlot_DateBetween(LocalDate from, LocalDate to);
 }

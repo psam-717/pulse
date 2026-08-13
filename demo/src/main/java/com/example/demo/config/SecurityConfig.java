@@ -61,7 +61,7 @@ public class SecurityConfig {
                         "/api/departments/*/doctors").permitAll()
                 // Facility-plane (web dashboard) — staff auth required; role
                 // checks are @PreAuthorize on the controllers
-                .requestMatchers("/api/departments/**", "/api/staff/**").authenticated()
+                .requestMatchers("/api/departments/**", "/api/staff/**", "/api/appointments/**").authenticated()
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )
