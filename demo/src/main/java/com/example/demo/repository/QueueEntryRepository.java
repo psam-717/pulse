@@ -15,6 +15,8 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     /** Full waiting/active list for the facility's queue views (Phase 5 expands). */
     List<QueueEntry> findByDepartmentIdAndStatusIn(String departmentId, List<QueueStatus> statuses);
 
+    List<QueueEntry> findByDepartmentIdAndStatus(String departmentId, QueueStatus status);
+
     long countByDepartmentIdAndStatus(String departmentId, QueueStatus status);
 
     /** Ticket number generation: entries for a department since start of day. */
@@ -28,4 +30,9 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     java.util.List<QueueEntry> findByDepartmentIdAndPatientNameAndSourceAndStatus(
             String departmentId, String patientName, com.example.demo.model.PatientSource source,
             QueueStatus status);
+
+    /** Active queue lookup for the patient directory (name-based, demo-grade). */
+    java.util.List<QueueEntry> findByPatientNameIgnoreCase(String patientName);
+
+    java.util.Optional<QueueEntry> findByTicketNumber(String ticketNumber);
 }
