@@ -59,6 +59,11 @@ public class SecurityConfig {
                 // department/staff APIs below require staff auth.
                 .requestMatchers(HttpMethod.GET, "/api/hospitals/**", "/api/doctors/**",
                         "/api/departments/*/doctors").permitAll()
+                // Uploaded images (avatars, logos, HeFRA docs) are served to
+                // <img> tags which cannot send Authorization headers — the
+                // UUID filenames + extension whitelist keep them unguessable;
+                // WRITES stay authenticated.
+                .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                 // Facility-plane (web dashboard) — staff auth required; role
                 // checks are @PreAuthorize on the controllers
                 .requestMatchers("/api/departments/**", "/api/staff/**", "/api/appointments/**",

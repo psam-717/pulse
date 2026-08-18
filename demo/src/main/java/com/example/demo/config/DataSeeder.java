@@ -28,6 +28,8 @@ import com.example.demo.repository.PatientRepository;
 import com.example.demo.repository.QueueEntryRepository;
 import com.example.demo.repository.StaffMemberRepository;
 import com.example.demo.repository.TimeSlotRepository;
+import com.example.demo.repository.OperationalSettingsRepository;
+import com.example.demo.model.OperationalSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -51,6 +53,7 @@ public class DataSeeder implements CommandLineRunner {
     private final PatientRepository patientRepository;
     private final BookingRepository bookingRepository;
     private final QueueEntryRepository queueEntryRepository;
+    private final OperationalSettingsRepository operationalSettingsRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
 
@@ -63,6 +66,7 @@ public class DataSeeder implements CommandLineRunner {
                       PatientRepository patientRepository,
                       BookingRepository bookingRepository,
                       QueueEntryRepository queueEntryRepository,
+                      OperationalSettingsRepository operationalSettingsRepository,
                       org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
@@ -73,6 +77,7 @@ public class DataSeeder implements CommandLineRunner {
         this.patientRepository = patientRepository;
         this.bookingRepository = bookingRepository;
         this.queueEntryRepository = queueEntryRepository;
+        this.operationalSettingsRepository = operationalSettingsRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
@@ -80,6 +85,7 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) {
         ensureConstraintRepair();
+        ensureSettingsColumns();
         // Only seed if no data exists yet
         if (hospitalRepository.count() > 0) {
             ensureSuperAdminExists();
@@ -364,7 +370,47 @@ public class DataSeeder implements CommandLineRunner {
                 facilityId, departmentRepository.findByFacilityId(facilityId).size(),
                 staffMemberRepository.findByFacilityId(facilityId).size());
 
+        ensureFacilitySettings(facility);
+
         ensureDemoBookings();
+    }
+
+    /**
+     * Hibernate ddl-auto=update does not reliably ALTER existing tables for
+     * new columns (it added the hospitals columns but skipped staff_members
+     * in the Phase 6 bring-up). Run the same idempotent ADD COLUMN IF NOT
+     * EXISTS repair the constraint repair uses, BEFORE any entity query.
+     */
+    private void ensureSettingsColumns() {
+        jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS email_on_new_appointment boolean DEFAULT true");
+        jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS email_on_no_show boolean DEFAULT true");
+        jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS sms_on_queue_alert boolean DEFAULT false");
+        jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS daily_summary_email boolean DEFAULT true");
+        jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS region varchar(255)");
+        jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS facility_type varchar(255) DEFAULT 'hospital'");
+        jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS logo_url varchar(255)");
+        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane)");
+    }
+
+    /**
+     * Settings-plane demo defaults (Phase 6): the facility row's profile
+     * fields (region/facilityType — real per-facility values) and the
+     * operational settings row (frontend-mock defaults, queue priority
+     * levels emergency/urgent/routine 3/2/1). Idempotent.
+     */
+    private void ensureFacilitySettings(Hospital facility) {
+        if (facility.getRegion() == null || facility.getRegion().isBlank()) {
+            facility.setRegion("Greater Accra");
+            facility.setFacilityType("hospital");
+            hospitalRepository.save(facility);
+        }
+        if (operationalSettingsRepository.findByFacilityId(facility.getId()).isEmpty()) {
+            OperationalSettings settings = new OperationalSettings(facility.getId());
+            settings.setQueuePriorityLevelsJson(
+                    "emergency:Emergency:3|urgent:Urgent:2|routine:Routine:1");
+            operationalSettingsRepository.save(settings);
+            log.info("✅ Operational settings seeded for facility {}", facility.getId());
+        }
     }
 
     /**
