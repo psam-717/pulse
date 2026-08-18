@@ -27,8 +27,30 @@ public class Department {
     private Department parentDepartment;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "hospital_id", nullable = false)
+    @JoinColumn(name = "hospital_id", nullable = true)
     private Hospital hospital;
+
+    // ===== Facility-plane fields (BACKEND_SPEC.md §5.3) =====
+    // All nullable so ddl-auto=update can add them to existing tables;
+    // the response DTO applies defaults for legacy rows.
+
+    /** Tenant id — the facility this department belongs to (never client-settable). */
+    private Long facilityId;
+
+    /** active | closed | archived */
+    private String status = "active";
+
+    private String headDoctorName;
+
+    private Integer rooms;
+
+    /** "HH:MM" */
+    private String opensAt = "08:00";
+
+    /** "HH:MM" */
+    private String closesAt = "17:00";
+
+    private Boolean twentyFourSeven = false;
 
     public Department() {}
 
@@ -62,4 +84,25 @@ public class Department {
 
     public Hospital getHospital() { return hospital; }
     public void setHospital(Hospital hospital) { this.hospital = hospital; }
+
+    public Long getFacilityId() { return facilityId; }
+    public void setFacilityId(Long facilityId) { this.facilityId = facilityId; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getHeadDoctorName() { return headDoctorName; }
+    public void setHeadDoctorName(String headDoctorName) { this.headDoctorName = headDoctorName; }
+
+    public Integer getRooms() { return rooms; }
+    public void setRooms(Integer rooms) { this.rooms = rooms; }
+
+    public String getOpensAt() { return opensAt; }
+    public void setOpensAt(String opensAt) { this.opensAt = opensAt; }
+
+    public String getClosesAt() { return closesAt; }
+    public void setClosesAt(String closesAt) { this.closesAt = closesAt; }
+
+    public Boolean getTwentyFourSeven() { return twentyFourSeven; }
+    public void setTwentyFourSeven(Boolean twentyFourSeven) { this.twentyFourSeven = twentyFourSeven; }
 }

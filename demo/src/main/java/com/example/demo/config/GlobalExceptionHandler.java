@@ -1,6 +1,7 @@
 package com.example.demo.config;
 
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.exception.ConflictException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import tools.jackson.databind.exc.InvalidFormatException;
 
 import java.util.List;
@@ -95,6 +97,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(403, "Access denied. You don't have permission to perform this action."));
     }
 
+    // Business-rule conflict (e.g. department canDelete gate, queue call-next races)
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiResponse> handleConflict(ConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(409, ex.getMessage()));
+    }
+
     // Business logic errors from services
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResponseEntity<ApiResponse> handleBadRequest(RuntimeException ex) {
@@ -123,6 +132,17 @@ public class GlobalExceptionHandler {
         log.warn("Data integrity violation: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(409, msg));
+    }
+
+    // Unknown routes / not-yet-implemented endpoints. Spring MVC falls back
+    // to the static-resource handler for unmapped paths, which throws this —
+    // the catch-all must NOT turn it into a scary 500 with a stack trace.
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse> handleNotFound(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(404,
+                        "Endpoint not found: " + ex.getHttpMethod() + " " + ex.getResourcePath()
+                                + ". It may not be implemented yet."));
     }
 
     // Catch-all for unhandled errors

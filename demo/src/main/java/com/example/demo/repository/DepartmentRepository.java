@@ -16,4 +16,9 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
     Optional<Department> findByIdAndHospitalId(Long id, Long hospitalId);
     Optional<Department> findByNameAndHospitalId(String name, Long hospitalId);
     Optional<Department> findByAbbreviation(String abbreviation);
+
+    // Facility-plane (web dashboard) — tenant-scoped queries
+    List<Department> findByFacilityId(Long facilityId);
+    Optional<Department> findByIdAndFacilityId(Long id, Long facilityId);
+    boolean existsByNameAndFacilityId(String name, Long facilityId);
 }
