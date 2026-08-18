@@ -267,6 +267,15 @@ Legend: ✅ exists & compatible · 🔶 partial (shape/scope differs) · ❌ mis
 9. `PermissionMatrixController` — `GET/PATCH /settings/permissions` (rows + role/level; **used by @PreAuthorize enforcement**, see Phase 2)
 10. `ImageUploadController` — multipart POST → URL (§9.3; reuse `FileStorageService`)
 
+**Slice 1 (DONE — `feat/settings-core`, Aug 18):** items 1, 2, 3, 10 landed.
+- `GET/PATCH /api/settings/facility` — maps Hospital (id=facilityId) → FacilityProfile; `region`/`facilityType`/`logoUrl` columns added; status derived server-side (`REJECTED→suspended`, doc→`active`, else `active_pending_docs` + 90-day `hefraDueDate`); HeFRA doc via `hefraDocumentUrl` on PATCH applies `active_pending_docs→active`
+- `GET/PATCH /api/settings/profile` + `POST .../change-password` — StaffMember-based; 4 notification-pref booleans added; BCrypt current-password check, ≥8 chars, no-reuse
+- `GET/PATCH /api/settings/operational` — one row/facility (`operational_settings`), lazy-created with mock defaults; priority levels validated against emergency|urgent|routine
+- `POST /api/uploads/images` — reuses FileStorageService (whitelist + 10MB); `GET /uploads/**` made public so `<img>` tags render (writes stay authenticated)
+- Seeder: `ensureSettingsColumns()` (JdbcTemplate ADD COLUMN IF NOT EXISTS — Hibernate ddl-auto=update skipped staff_members columns) + `ensureFacilitySettings()` (region/facilityType + operational row)
+- Verified: curl suite (partial PATCH, password cycle, 403 doctor/401 anon, upload, HeFRA transition) + browser E2E on `/d/settings` tabs (Facility/Profile/Operational render live data; HeFRA grace banner shows)
+- **Slice 2 remaining:** items 4-9 (sessions, 2fa, preferences, account-request, invites, permissions)
+
 ### Phase 7 — Notifications (1–2 days)
 
 **Objective:** §6.6 read/mark endpoints + seed/trigger mechanism (minimal).

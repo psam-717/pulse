@@ -70,6 +70,12 @@ public class StaffMember {
     @Column(nullable = false)
     private String password;
 
+    /** Personal notification preferences (Settings → Profile, §5.8). */
+    private boolean emailOnNewAppointment = true;
+    private boolean emailOnNoShow = true;
+    private boolean smsOnQueueAlert = false;
+    private boolean dailySummaryEmail = true;
+
     public StaffMember() {}
 
     public StaffMember(String name, StaffRole role, String title, String specialty,
@@ -143,4 +149,16 @@ public class StaffMember {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public boolean isEmailOnNewAppointment() { return emailOnNewAppointment; }
+    public void setEmailOnNewAppointment(boolean emailOnNewAppointment) { this.emailOnNewAppointment = emailOnNewAppointment; }
+
+    public boolean isEmailOnNoShow() { return emailOnNoShow; }
+    public void setEmailOnNoShow(boolean emailOnNoShow) { this.emailOnNoShow = emailOnNoShow; }
+
+    public boolean isSmsOnQueueAlert() { return smsOnQueueAlert; }
+    public void setSmsOnQueueAlert(boolean smsOnQueueAlert) { this.smsOnQueueAlert = smsOnQueueAlert; }
+
+    public boolean isDailySummaryEmail() { return dailySummaryEmail; }
+    public void setDailySummaryEmail(boolean dailySummaryEmail) { this.dailySummaryEmail = dailySummaryEmail; }
 }

@@ -19,6 +19,14 @@ public class Hospital {
 
     private String licenseDocumentUrl;
 
+    /** Settings-plane fields (BACKEND_SPEC §5.8 FacilityProfile). */
+    private String region;
+
+    /** hospital | clinic | health_center | diagnostic_center — defaults to hospital. */
+    private String facilityType = "hospital";
+
+    private String logoUrl;
+
     @Column(nullable = false)
     private String address;
 
@@ -65,6 +73,15 @@ public class Hospital {
 
     public String getLicenseDocumentUrl() { return licenseDocumentUrl; }
     public void setLicenseDocumentUrl(String licenseDocumentUrl) { this.licenseDocumentUrl = licenseDocumentUrl; }
+
+    public String getRegion() { return region; }
+    public void setRegion(String region) { this.region = region; }
+
+    public String getFacilityType() { return facilityType; }
+    public void setFacilityType(String facilityType) { this.facilityType = facilityType; }
+
+    public String getLogoUrl() { return logoUrl; }
+    public void setLogoUrl(String logoUrl) { this.logoUrl = logoUrl; }
 
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
