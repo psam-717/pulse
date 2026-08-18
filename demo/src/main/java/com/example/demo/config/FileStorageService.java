@@ -47,43 +47,61 @@ public class FileStorageService {
     }
 
     /**
-     * Store a license document for a hospital.
+     * Store a file under a hospital-id folder (staff / facility uploads).
      *
      * @param file       The uploaded file
      * @param hospitalId The hospital ID
      * @return The relative URL path to access the file (e.g. "/uploads/1/uuid.pdf")
      */
     public String store(MultipartFile file, Long hospitalId) {
+        return store(file, String.valueOf(hospitalId));
+    }
+
+    /**
+     * Store a file under {@code uploadDir}/{folder}/uuid.ext}.
+     * {@code folder} is {@code "{hospitalId}"} for staff or
+     * {@code "patients/{patientId}"} for insurance card photos.
+     *
+     * @return The relative URL path (e.g. "/uploads/patients/12/uuid.jpg")
+     */
+    public String store(MultipartFile file, String folder) {
         validateFile(file);
+        if (folder == null || folder.isBlank()) {
+            throw new IllegalArgumentException("Upload folder is required");
+        }
+        String safeFolder = folder.replace("\\", "/");
+        if (safeFolder.contains("..") || safeFolder.startsWith("/")) {
+            throw new SecurityException("Invalid upload folder");
+        }
 
         String originalFilename = file.getOriginalFilename();
         String extension = getExtension(originalFilename);
         String storedName = UUID.randomUUID() + "." + extension;
 
-        // Create hospital subdirectory
-        Path hospitalDir = uploadDir.resolve(String.valueOf(hospitalId));
+        Path targetDir = uploadDir.resolve(safeFolder).normalize();
+        if (!targetDir.startsWith(uploadDir)) {
+            throw new SecurityException("Invalid file path");
+        }
         try {
-            Files.createDirectories(hospitalDir);
+            Files.createDirectories(targetDir);
         } catch (IOException e) {
-            throw new RuntimeException("Could not create hospital upload directory", e);
+            throw new RuntimeException("Could not create upload directory", e);
         }
 
-        Path targetPath = hospitalDir.resolve(storedName).normalize();
-
-        // Ensure the resolved path is still within the upload directory (path traversal check)
+        Path targetPath = targetDir.resolve(storedName).normalize();
         if (!targetPath.startsWith(uploadDir)) {
             throw new SecurityException("Invalid file path");
         }
 
         try (InputStream inputStream = file.getInputStream()) {
             Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            log.info("License file stored: {} (hospitalId={}, size={} bytes)",
-                    storedName, hospitalId, file.getSize());
+            log.info("File stored: {} (folder={}, size={} bytes)",
+                    storedName, safeFolder, file.getSize());
         } catch (IOException e) {
             throw new RuntimeException("Failed to store file: " + originalFilename, e);
         }
 
-        return "/uploads/" + hospitalId + "/" + storedName;
+        return "/uploads/" + safeFolder + "/" + storedName;
     }
 
     /**
