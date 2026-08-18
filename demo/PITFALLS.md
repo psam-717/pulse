@@ -234,6 +234,39 @@ Rules:
 - **Prevention:** any department used in the mobile book flow needs at
   least one `Doctor` row. Don't assume availability implies bookability.
 
+### 3.8 Aza payments: amount unit is likely PESEWAS, not GHS (P4)
+- **When:** P4 planning, Aug 18 2026 (before Grok Build's implementation).
+- **Symptom:** Aza's public landing example shows "Charge a customer ₵50.00"
+  with request body `"amount": 5000` — i.e. amounts in minor units (pesewas).
+  Charging `20.00` as GHS would silently charge ₵20 vs ₵0.20 — or vice versa.
+- **Root cause:** the API's `amount` field is denominated in pesewas
+  (100 pesewas = 1 GHS); our `Booking.amountDue` is a `BigDecimal` in GHS.
+- **Fix:** convert exactly once in a dedicated `AzaAmountConverter`
+  (`GHS → minor units = amount.movePointRight(2)`). Confirm the unit in the
+  Aza API Explorer (login-walled) before trusting the landing example.
+- **Prevention:** document the unit in code + here; test with a real test key.
+
+### 3.9 Aza has NO stored-instrument API — PaymentMethod rows are display metadata (P4)
+- **When:** P4 planning, Aug 18 2026.
+- **Symptom:** expecting to save a MoMo/card token server-side and charge it
+  later, like Paystack/Hubtel.
+- **Root cause:** Aza's merchant API is **hosted-checkout only** — the customer
+  pays inside the Aza app; MoMo/card rails are Aza's concern. There is no
+  merchant endpoint to store chargeable instruments.
+- **Fix:** `PaymentMethod` rows store only display metadata (network, label,
+  last4). Charging = create an Aza checkout session → return the hosted URL →
+  mobile opens it → `checkout.completed` webhook flips bookings to PAID.
+  Map the mobile `gatewayToken` field to the Aza **session id** (`cs_...`).
+- **Prevention:** never design around server-side stored instruments with Aza.
+
+### 3.10 Aza webhook: confirm only via webhook, idempotently (P4)
+- **When:** P4 planning, Aug 18 2026.
+- **Detail:** `POST /api/webhooks/aza` is the only thing that marks a booking
+  PAID — never optimistic-confirm. Aza retries webhook delivery, so the
+  handler must be idempotent: if the `PaymentTransaction` is already
+  COMPLETED, return 200 and do nothing (no duplicate history entries).
+- **Prevention:** check transaction status first; dedupe by `azaSessionId`.
+
 ---
 
 ## 4. Frontend (web) — `housebuoy/pulse-web`
