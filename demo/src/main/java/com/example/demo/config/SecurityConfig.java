@@ -57,6 +57,7 @@ public class SecurityConfig {
                 // The only public department route is the mobile doctor-list
                 // per department (DoctorController); the facility-plane
                 // department/staff APIs below require staff auth.
+                // P2 /api/mobile/** is patient-JWT only (@PreAuthorize).
                 .requestMatchers(HttpMethod.GET, "/api/hospitals/**", "/api/doctors/**",
                         "/api/departments/*/doctors").permitAll()
                 // Uploaded images (avatars, logos, HeFRA docs) are served to

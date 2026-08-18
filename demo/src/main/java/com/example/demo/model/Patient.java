@@ -79,6 +79,16 @@ public class Patient {
     private String emergencyContactRelationship;
     private String emergencyContactPhone;
 
+    // ===== Mobile insurance (ARCHITECTURE.md §8 P2 / G3) =====
+    // Patient-scoped PII — Ghana DPA Act 843. Exposed as InsuranceDetails
+    // (scheme, membershipNumber, cardholderName, expiryDate, cardPhotoUri).
+
+    private String insuranceScheme;
+    private String insuranceMembershipNumber;
+    private String insuranceCardholderName;
+    private LocalDate insuranceExpiryDate;
+    private String insuranceCardPhotoUrl;
+
     private LocalDateTime registeredAt;
 
     @ManyToMany
@@ -173,6 +183,21 @@ public class Patient {
 
     public String getEmergencyContactPhone() { return emergencyContactPhone; }
     public void setEmergencyContactPhone(String emergencyContactPhone) { this.emergencyContactPhone = emergencyContactPhone; }
+
+    public String getInsuranceScheme() { return insuranceScheme; }
+    public void setInsuranceScheme(String insuranceScheme) { this.insuranceScheme = insuranceScheme; }
+
+    public String getInsuranceMembershipNumber() { return insuranceMembershipNumber; }
+    public void setInsuranceMembershipNumber(String insuranceMembershipNumber) { this.insuranceMembershipNumber = insuranceMembershipNumber; }
+
+    public String getInsuranceCardholderName() { return insuranceCardholderName; }
+    public void setInsuranceCardholderName(String insuranceCardholderName) { this.insuranceCardholderName = insuranceCardholderName; }
+
+    public LocalDate getInsuranceExpiryDate() { return insuranceExpiryDate; }
+    public void setInsuranceExpiryDate(LocalDate insuranceExpiryDate) { this.insuranceExpiryDate = insuranceExpiryDate; }
+
+    public String getInsuranceCardPhotoUrl() { return insuranceCardPhotoUrl; }
+    public void setInsuranceCardPhotoUrl(String insuranceCardPhotoUrl) { this.insuranceCardPhotoUrl = insuranceCardPhotoUrl; }
 
     public LocalDateTime getRegisteredAt() { return registeredAt; }
     public void setRegisteredAt(LocalDateTime registeredAt) { this.registeredAt = registeredAt; }

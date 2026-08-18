@@ -141,6 +141,33 @@ Rules:
   API shape changes, update the mobile store seeds/mocks in the SAME PR.
 - **Prevention:** read the relevant mobile store file before defining any DTO.
 
+### 3.3 `POST /api/uploads/images` used to reject patient tokens
+- **When:** P2 (Aug 18 2026).
+- **Symptom:** patient JWT calling the existing upload endpoint to store an
+  insurance card photo gets 403 "Facility context required".
+- **Root cause:** `UploadController` called `SecurityUtils.requireFacilityId()`,
+  which only staff tokens carry. Patient JWTs have a subject (patient id) but
+  no `facilityId` claim.
+- **Fix:** staff tokens still store under `{facilityId}/`; patient tokens store
+  under `patients/{patientId}/`. Anon stays 401. The returned `url` is then
+  PUT onto `/api/patients/me/insurance` as `cardPhotoUri`.
+- **Prevention:** any "reuse the upload endpoint" packet must accept PATIENT
+  as well as staff — don't assume every authenticated caller has a facility.
+
+### 3.4 Seeded hospitals are PENDING — discovery will be empty
+- **When:** P2 (Aug 18 2026).
+- **Symptom:** `GET /api/mobile/hospitals` returns `[]` even though Korle Bu
+  and Ridge exist in the DB.
+- **Root cause:** `Hospital.verificationStatus` defaults to `PENDING`; the
+  original seeder never approved them. Discovery lists `APPROVED` only.
+- **Fix:** `DataSeeder.ensureDiscoveryDemoData()` approves the known seed
+  hospitals (MLSC-* / Korle Bu / Ridge / KNUST) when they are still PENDING
+  with no rejection reason, and adds KNUST University Hospital if missing.
+  User-registered hospitals that are still PENDING are left alone.
+- **Prevention:** if a new discovery endpoint filters on `APPROVED`, seed
+  (or backfill) that status in the same packet. Don't approve every PENDING
+  row — that would leak unverified registrations.
+
 ---
 
 ## 4. Frontend (web) — `housebuoy/pulse-web`

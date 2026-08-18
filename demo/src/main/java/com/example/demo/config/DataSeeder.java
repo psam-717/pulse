@@ -19,6 +19,8 @@ import com.example.demo.model.StaffDutyStatus;
 import com.example.demo.model.StaffMember;
 import com.example.demo.model.StaffRole;
 import com.example.demo.model.TimeSlot;
+import com.example.demo.model.VerificationStatus;
+import com.example.demo.model.WorkingHours;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.DoctorRepository;
@@ -28,6 +30,7 @@ import com.example.demo.repository.PatientRepository;
 import com.example.demo.repository.QueueEntryRepository;
 import com.example.demo.repository.StaffMemberRepository;
 import com.example.demo.repository.TimeSlotRepository;
+import com.example.demo.repository.WorkingHoursRepository;
 import com.example.demo.repository.OperationalSettingsRepository;
 import com.example.demo.model.OperationalSettings;
 import org.slf4j.Logger;
@@ -54,6 +57,7 @@ public class DataSeeder implements CommandLineRunner {
     private final BookingRepository bookingRepository;
     private final QueueEntryRepository queueEntryRepository;
     private final OperationalSettingsRepository operationalSettingsRepository;
+    private final WorkingHoursRepository workingHoursRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
 
@@ -67,6 +71,7 @@ public class DataSeeder implements CommandLineRunner {
                       BookingRepository bookingRepository,
                       QueueEntryRepository queueEntryRepository,
                       OperationalSettingsRepository operationalSettingsRepository,
+                      WorkingHoursRepository workingHoursRepository,
                       org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
@@ -78,6 +83,7 @@ public class DataSeeder implements CommandLineRunner {
         this.bookingRepository = bookingRepository;
         this.queueEntryRepository = queueEntryRepository;
         this.operationalSettingsRepository = operationalSettingsRepository;
+        this.workingHoursRepository = workingHoursRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
@@ -92,6 +98,8 @@ public class DataSeeder implements CommandLineRunner {
             seedTimeSlotsIfEmpty();
             ensureFacilityDemoData();
             ensureDemoMedicalProfiles();
+            ensureDiscoveryDemoData();
+            ensureDemoInsurance();
             log.info("Database already seeded — skipping");
             return;
         }
@@ -197,6 +205,8 @@ public class DataSeeder implements CommandLineRunner {
         // Facility-plane demo accounts + departments (web dashboard login)
         ensureFacilityDemoData();
         ensureDemoMedicalProfiles();
+        ensureDiscoveryDemoData();
+        ensureDemoInsurance();
     }
 
     /**
@@ -424,6 +434,135 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     /**
+     * Mobile insurance demo data (ARCHITECTURE.md §8 P2) — mirrors the
+     * pulse-mobile insurance-store seed. Idempotent: only fills patients
+     * whose insurance_scheme is still null, so a PUT from the app survives
+     * a reboot (PITFALLS.md §2.2).
+     */
+    private void ensureDemoInsurance() {
+        // [phone, scheme, membershipNumber, cardholderName, expiryDate]
+        String[][] rows = {
+                {"+233 24 111 0001", "NHIS", "NHIS-00101-2026", "Kwame Mensah", "2027-01-31"},
+                {"+233 24 111 0002", "NHIS", "NHIS-00102-2026", "Abena Asante", "2026-12-31"},
+        };
+        for (String[] row : rows) {
+            patientRepository.findByPhone(row[0]).ifPresent(p -> {
+                if (p.getInsuranceScheme() == null && p.getInsuranceMembershipNumber() == null) {
+                    p.setInsuranceScheme(row[1]);
+                    p.setInsuranceMembershipNumber(row[2]);
+                    p.setInsuranceCardholderName(row[3]);
+                    p.setInsuranceExpiryDate(java.time.LocalDate.parse(row[4]));
+                    patientRepository.save(p);
+                }
+            });
+        }
+        log.info("✅ Demo insurance records ensured (P2 mobile)");
+    }
+
+    /**
+     * Discovery-plane demo data (ARCHITECTURE.md §8 P2 / G4):
+     * approve the seeded teaching hospitals, backfill lat/lng/specialties
+     * only when missing, add KNUST University Hospital if absent, and seed
+     * default working hours (Mon–Sat 08:00–17:00, Sunday closed) when a
+     * hospital has none. Never overwrites user-edited hospital fields.
+     */
+    private void ensureDiscoveryDemoData() {
+        for (Hospital h : hospitalRepository.findAll()) {
+            if (h.getVerificationStatus() == VerificationStatus.PENDING
+                    && h.getRejectionReason() == null
+                    && isSeededDiscoveryHospital(h)) {
+                h.setVerificationStatus(VerificationStatus.APPROVED);
+            }
+            if (h.getLatitude() == null || h.getLongitude() == null) {
+                double[] coords = defaultCoordsFor(h.getName());
+                if (coords != null) {
+                    h.setLatitude(coords[0]);
+                    h.setLongitude(coords[1]);
+                }
+            }
+            if (h.getSpecialties() == null || h.getSpecialties().isBlank()) {
+                String specs = defaultSpecialtiesFor(h.getName());
+                if (specs != null) h.setSpecialties(specs);
+            }
+            hospitalRepository.save(h);
+            ensureDefaultWorkingHours(h);
+        }
+        ensureKnustHospital();
+        log.info("✅ Discovery demo data ensured (approved hospitals + working hours)");
+    }
+
+    private static boolean isSeededDiscoveryHospital(Hospital h) {
+        String license = h.getLicenseNumber() == null ? "" : h.getLicenseNumber();
+        String name = h.getName() == null ? "" : h.getName();
+        return license.startsWith("MLSC-")
+                || name.contains("Korle Bu")
+                || name.contains("Ridge")
+                || name.contains("KNUST");
+    }
+
+    private static double[] defaultCoordsFor(String name) {
+        if (name == null) return null;
+        if (name.contains("Korle Bu")) return new double[]{5.5379, -0.2260};
+        if (name.contains("Ridge")) return new double[]{5.5603, -0.1969};
+        if (name.contains("KNUST")) return new double[]{6.6745, -1.5716};
+        return null;
+    }
+
+    private static String defaultSpecialtiesFor(String name) {
+        if (name == null) return null;
+        if (name.contains("Korle Bu")) return "[\"Cardiology\",\"Orthopedics\"]";
+        if (name.contains("Ridge")) return "[\"Pediatrics\",\"Neurology\"]";
+        if (name.contains("KNUST")) return "[\"Cardiology\",\"Pediatrics\",\"General OPD\"]";
+        return null;
+    }
+
+    private void ensureDefaultWorkingHours(Hospital hospital) {
+        if (!workingHoursRepository.findByHospitalId(hospital.getId()).isEmpty()) return;
+        java.time.LocalTime open = java.time.LocalTime.of(8, 0);
+        java.time.LocalTime close = java.time.LocalTime.of(17, 0);
+        for (int dow = 1; dow <= 7; dow++) {
+            WorkingHours wh = new WorkingHours(hospital, dow, open, close);
+            wh.setClosed(dow == 7);
+            workingHoursRepository.save(wh);
+        }
+    }
+
+    private void ensureKnustHospital() {
+        boolean exists = hospitalRepository.findAll().stream()
+                .anyMatch(h -> h.getName() != null && h.getName().contains("KNUST"));
+        if (exists) return;
+
+        Hospital knust = new Hospital(
+                "KNUST University Hospital",
+                "MLSC-KNUST-2018-003",
+                "University Road, Kumasi",
+                "+233 322 060 311",
+                "info@uhs.knust.edu.gh");
+        knust.setVerificationStatus(VerificationStatus.APPROVED);
+        knust.setLatitude(6.6745);
+        knust.setLongitude(-1.5716);
+        knust.setRegion("Ashanti");
+        knust.setFacilityType("hospital");
+        knust.setSpecialties("[\"Cardiology\",\"Pediatrics\",\"General OPD\"]");
+        knust = hospitalRepository.save(knust);
+
+        if (departmentRepository.findByAbbreviation("K-GOPD").isEmpty()) {
+            Department gopd = new Department(
+                    "General OPD", "K-GOPD",
+                    "Walk-in outpatient consultation for general cases",
+                    new java.math.BigDecimal("20.00"), knust);
+            gopd.setFacilityId(knust.getId());
+            gopd.setStatus("active");
+            gopd.setOpensAt("08:00");
+            gopd.setClosesAt("17:00");
+            gopd.setTwentyFourSeven(false);
+            departmentRepository.save(gopd);
+        }
+        ensureDefaultWorkingHours(knust);
+        log.info("✅ KNUST University Hospital seeded for mobile discovery");
+    }
+
+    /**
      * Hibernate ddl-auto=update does not reliably ALTER existing tables for
      * new columns (it added the hospitals columns but skipped staff_members
      * in the Phase 6 bring-up). Run the same idempotent ADD COLUMN IF NOT
@@ -446,7 +585,13 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_name varchar(255)");
         jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_relationship varchar(255)");
         jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_phone varchar(255)");
-        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane, patients mobile medical)");
+        // Mobile insurance (P2): patient-scoped NHIS/private record + card photo URL.
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_scheme varchar(255)");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_membership_number varchar(255)");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_cardholder_name varchar(255)");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_expiry_date date");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_card_photo_url varchar(512)");
+        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane, patients mobile medical + insurance)");
     }
 
     /**
