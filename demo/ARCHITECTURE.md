@@ -423,7 +423,9 @@ GET  /api/patients/me/outstanding    // bookings with paymentStatus != PAID, inc
 **Rules:** booking per department — service picks the department's doctor with fewest bookings that day (or next in rotation); `doctor` field fills in but patient never sees it. `payByDeadline` = booking time + `OperationalSettings.appointmentSlotMinutes`-based window (default 48h); **server-side job** (Spring `@Scheduled`) auto-cancels + releases slot when deadline passes — the mobile store comment explicitly says the server must enforce this. `GET /me/outstanding` returns only unpaid, non-cancelled, not-checked-in bookings.
 **Verify:** patient login → POST mobile booking → GET `/me/outstanding` shows it with deadline → reschedule to a free slot → 200; reschedule to a booked slot → 409/400 with guidance message.
 
-### P4 — Payments: methods, charge, history (backend)
+### P4 — Payments: methods, charge, history (backend) — GATEWAY: Aza 🔴 in progress (Grok Build, 2026-08-18)
+
+> **Status: IN PROGRESS** — assigned to Grok Build with the Aza gateway. Do not duplicate.
 
 **Scope:** G8.
 **Files:** `model/PaymentMethod.java` (new), `model/PaymentTransaction.java` (new), `controller/PaymentController.java` (`/api/patients/me/payment-*`), `dto/` (PaymentMethodResponse, AddPaymentMethodRequest, PayRequest, PaymentHistoryEntryResponse), `service/PaymentService.java`, `seeder`.
@@ -434,13 +436,21 @@ GET    /api/patients/me/payment-methods    → PaymentMethodResponse[] (mobile s
 POST   /api/patients/me/payment-methods    // { network, last4, gatewayToken, label } — tokenized only
 PATCH  /api/patients/me/payment-methods/{id}/default
 DELETE /api/patients/me/payment-methods/{id}
-POST   /api/patients/me/payments            // { bookingIds: [42], methodId: 7 } → marks PAID + history
+POST   /api/patients/me/payments            // { bookingIds: [42], methodId: 7 } → creates Aza session → checkoutUrl
 GET    /api/patients/me/payment-history     → PaymentHistoryEntryResponse[] (mobile shape)
+POST   /api/webhooks/aza                     // webhook receiver (permit-all, verified)
 ```
 
 **Contracts:** mirror `payments-store.ts` shapes exactly (`PaymentMethod`, `PaymentHistoryEntry`).
-**Rules:** **never store raw card/MoMo numbers or PINs** — only `gatewayToken` + `last4` (display aid). Payment is a stub for a real gateway (Paystack/Hubtel/Flutterwave later): `POST /payments` records a `PaymentTransaction`, flips `Booking.paymentStatus → PAID`, clears the booking from `outstanding`, appends to history. Include a `provider`/`reference` field on the transaction so a real gateway webhook can reconcile later. Default method rule: first added becomes default; deleting default promotes the next.
-**Verify:** login → add MTN MoMo method → list shows `{network:"mtn_momo", label:"MTN MoMo •••• 4567", isDefault:true}` → pay a booking → it disappears from `/me/outstanding` and appears in history.
+
+**Gateway = Aza (aza.systems — the payments API for Ghana):**
+- Base URL `https://api.aza.systems`, all endpoints under `/api/v1/merchant/`, auth via `X-Api-Key: ***` header (test keys `aza_test_...` behave like live but move no money). Single environment — no separate sandbox host.
+- Checkout flow: `POST /api/v1/merchant/sessions` `{amount, currency}` → hosted link `pay.aza.systems/c/cs_...`; customer pays inside the Aza app (MoMo/card rails are Aza's concern); `checkout.completed` webhook confirms.
+- **⚠️ AMOUNT UNIT TRAP:** landing example "₵50.00" → `amount: 5000` implies **pesewas (minor units)**. Must confirm in API explorer before coding; convert exactly once (GHS BigDecimal → minor units).
+- **⚠️ NO STORED-INSTRUMENT API:** hosted-checkout only. `PaymentMethod` rows are display metadata (network/label/last4) — never chargeable instruments. `gatewayToken` on the mobile shape = the Aza session id (`cs_...`) stored on the transaction.
+- Confirmation ONLY via webhook (never optimistic PAID); idempotent (retries are no-ops). If `AZA_API_KEY` absent → MockGateway fallback (fake `cs_test_mock_...` URL; webhook completes it) so dev needs no key.
+- **Never store raw card/MoMo numbers or PINs.** Default-method rule: first added becomes default; deleting default promotes the next.
+- Full prompt given to Grok Build includes: endpoints, contracts, unit-conversion rule, mock fallback, idempotency, verification steps (incl. auth negatives + webhook double-delivery).
 
 ### P5 — Mobile: API client + screen wiring (pulse-mobile)
 
