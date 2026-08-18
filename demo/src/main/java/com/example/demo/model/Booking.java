@@ -59,6 +59,10 @@ public class Booking {
     /** emergency | urgent | routine — patient-facing booking priority; default routine. */
     private String priority = "routine";
 
+    /** Server-enforced pay-by instant (ARCHITECTURE.md §8 P3). Null on
+     *  pre-P3 rows until the seeder backfills. */
+    private LocalDateTime payByDeadline;
+
     public Booking() {}
 
     public Booking(Patient patient, Doctor doctor, Department department, Hospital hospital,
@@ -116,4 +120,7 @@ public class Booking {
 
     public String getPriority() { return priority; }
     public void setPriority(String priority) { this.priority = priority; }
+
+    public LocalDateTime getPayByDeadline() { return payByDeadline; }
+    public void setPayByDeadline(LocalDateTime payByDeadline) { this.payByDeadline = payByDeadline; }
 }
