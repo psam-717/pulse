@@ -220,6 +220,7 @@ public class DataSeeder implements CommandLineRunner {
         try {
             jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_payment_status_check");
             jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check");
+            // Covers PaymentStatus.REFUNDED and BookingStatus.PENDING_PAYMENT (P3).
             log.info("✅ Repaired stale booking CHECK constraints (bookings_payment_status_check / bookings_status_check)");
         } catch (Exception e) {
             log.warn("Booking constraint repair skipped: {}", e.getMessage());
@@ -488,6 +489,7 @@ public class DataSeeder implements CommandLineRunner {
             ensureDefaultWorkingHours(h);
         }
         ensureKnustHospital();
+        ensureKnustDoctor();
         log.info("✅ Discovery demo data ensured (approved hospitals + working hours)");
     }
 
@@ -563,6 +565,27 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     /**
+     * KNUST General OPD was seeded without a doctor in P2. P3 bookings
+     * require a TimeSlot.doctor — add one if the department is empty.
+     */
+    private void ensureKnustDoctor() {
+        Department gopd = departmentRepository.findByAbbreviation("K-GOPD").orElse(null);
+        if (gopd == null) return;
+        if (doctorRepository.countByDepartmentId(gopd.getId()) > 0) return;
+        Hospital knust = gopd.getHospital();
+        if (knust == null && gopd.getFacilityId() != null) {
+            knust = hospitalRepository.findById(gopd.getFacilityId()).orElse(null);
+        }
+        if (knust == null) return;
+        Doctor doc = new Doctor("Ama", "Boateng", "General Practice",
+                "ama.boateng@uhs.knust.edu.gh", "+233 322 060 312", "GC-2026-017",
+                "KNUST-GOPD-DOC-001", passwordEncoder.encode("admin123"),
+                knust, gopd);
+        doctorRepository.save(doc);
+        log.info("✅ KNUST General OPD doctor seeded for mobile booking");
+    }
+
+    /**
      * Hibernate ddl-auto=update does not reliably ALTER existing tables for
      * new columns (it added the hospitals columns but skipped staff_members
      * in the Phase 6 bring-up). Run the same idempotent ADD COLUMN IF NOT
@@ -591,7 +614,17 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_cardholder_name varchar(255)");
         jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_expiry_date date");
         jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_card_photo_url varchar(512)");
-        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane, patients mobile medical + insurance)");
+        // P3: pay-by deadline on bookings + operational window (default 48h).
+        jdbcTemplate.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pay_by_deadline timestamp");
+        jdbcTemplate.execute("ALTER TABLE operational_settings ADD COLUMN IF NOT EXISTS pay_by_deadline_hours integer DEFAULT 48");
+        // Use NOW()+48h, not booking_date+48h: booking_date is the create
+        // instant, so old unpaid demo rows would expire on the first job tick.
+        jdbcTemplate.update("""
+                UPDATE bookings
+                   SET pay_by_deadline = NOW() + INTERVAL '48 hours'
+                 WHERE pay_by_deadline IS NULL
+                """);
+        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane, patients mobile medical + insurance, bookings pay-by)");
     }
 
     /**

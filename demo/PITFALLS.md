@@ -168,6 +168,72 @@ Rules:
   (or backfill) that status in the same packet. Don't approve every PENDING
   row — that would leak unverified registrations.
 
+### 2.5 Do not backfill `pay_by_deadline` from `booking_date`
+- **When:** P3 (Aug 18 2026).
+- **Symptom:** first boot after adding the column, the expiry job cancelled
+  3 existing unpaid demo bookings and released their slots.
+- **Root cause:** `booking_date` is the *create* timestamp, not the
+  appointment. Rows created days ago got `booking_date + 48h` already in
+  the past, so `@Scheduled` treated them as overdue.
+- **Fix:** backfill null deadlines with `NOW() + INTERVAL '48 hours'`.
+  Only fill NULL — never overwrite a deadline the API already set.
+- **Prevention:** any "hours after booking" column must backfill from
+  current time (or the appointment instant), not from an old create stamp.
+
+### 3.5 Wire `paymentStatus` is `UNPAID`; the DB enum stays `PENDING`
+- **When:** P3 (Aug 18 2026).
+- **Symptom:** mobile OutstandingBooking expects `paymentStatus: "UNPAID"`,
+  but `PaymentStatus` has been `PENDING` since the first bookings table
+  (existing rows + CHECK history). Renaming the enum would break the web
+  dashboard and every seeded booking.
+- **Fix:** keep `PaymentStatus.PENDING` in the database; map it to `"UNPAID"`
+  only on `BookingSummaryResponse`. Do not add an `UNPAID` enum value.
+- **Prevention:** when a mobile contract word differs from an existing
+  backend enum, map at the DTO — don't grow the enum unless the DB value
+  itself must change.
+
+### 3.6 `@EnableScheduling` is required for pay-by auto-cancel
+- **When:** P3 (Aug 18 2026).
+- **Symptom:** `UnpaidBookingExpiryJob` is on the classpath but unpaid
+  bookings sit past `payByDeadline` forever.
+- **Root cause:** `@Scheduled` methods are ignored unless the application
+  class has `@EnableScheduling`.
+- **Fix:** `@EnableScheduling` on `DemoApplication`. GET
+  `/api/patients/me/outstanding` also runs the same expiry pass so a
+  Payments-screen refresh cancels overdue rows even if the tick hasn't
+  fired yet. Staff can set a deadline in the past via
+  `PATCH /api/bookings/{id}/pay-by-deadline` (ADMIN only) to verify.
+- **Prevention:** any new `@Scheduled` job must land with `@EnableScheduling`
+  in the same PR (or confirm it is already on).
+
+### 3.8 Cancelled bookings still own `time_slot_id` (OneToOne unique)
+- **When:** P3 (Aug 18 2026).
+- **Symptom:** after the expiry job releases a slot (`isBooked=false`),
+  availability shows the time as free, but `POST /api/bookings/mobile`
+  returns 409 "This record already exists".
+- **Root cause:** `Booking.timeSlot` is `@OneToOne`, so `bookings.time_slot_id`
+  is unique. Expiry/cancel flips `isBooked` but leaves the cancelled row
+  pointing at the slot — a new booking cannot reuse that row.
+- **Fix:** `claimSlot` reuses an unbooked TimeSlot only when no booking
+  (including cancelled) still references it; otherwise it inserts a new
+  TimeSlot for the same doctor/date/time. Availability still keys on
+  `isBooked`, so the grid stays correct.
+- **Prevention:** never assume "slot unbooked" means "slot row is free to
+  attach" under a OneToOne. Check `existsByTimeSlotId` or null the
+  association on cancel.
+
+### 3.7 A department with availability but no doctors cannot be booked
+- **When:** P3 (Aug 18 2026).
+- **Symptom:** `GET /api/mobile/departments/17/availability` returns a full
+  14-day grid (P2 synthesizes slots even with zero doctors) but
+  `POST /api/bookings/mobile` fails — `TimeSlot.doctor` is NOT NULL.
+- **Root cause:** P2 seeded KNUST General OPD without a doctor.
+- **Fix:** `DataSeeder.ensureKnustDoctor()` adds one GP when the department
+  has none. Booking still 400s with a guidance message if a department
+  truly has no doctors.
+- **Prevention:** any department used in the mobile book flow needs at
+  least one `Doctor` row. Don't assume availability implies bookability.
+
 ---
 
 ## 4. Frontend (web) — `housebuoy/pulse-web`
