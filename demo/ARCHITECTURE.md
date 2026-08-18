@@ -9,6 +9,13 @@
 ## 0. BUILD STATUS & GROK BUILD HANDOFF ⚡ (read this first)
 
 > **To Grok Build (and any agent picking up Pulse work):** this document is the contract. Read §5.2 (mobile data shapes) before defining any DTO, follow §9 conventions, and **never push to `main` or merge** — commit granularly (one file per commit, conventional commits), push a fresh `feat/*` branch, and open a PR. The repo owner (Psam) merges everything himself.
+>
+> **Also read `PITFALLS.md` (same repo root) — it's a living journal of every trap
+> and fix discovered so far (stale-classes build trap, seeder clobbering, web
+> build gate failures, mobile lint baseline, git workflow rules). If you hit a NEW
+> pitfall, resolve it, then ADD AN ENTRY there for the next agent — including the
+> fix and prevention. Both documents are maintained by every agent that works on
+> Pulse, Hermes and Grok Build alike.**
 
 ### Current progress (2026-08-18)
 
