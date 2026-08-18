@@ -27,6 +27,10 @@ public class OperationalSettings {
     private int queueRefreshSeconds = 10;
     private int appointmentSlotMinutes = 20;
     private int noShowGraceMinutes = 15;
+
+    /** Hours after booking creation before an unpaid booking auto-cancels. */
+    private int payByDeadlineHours = 48;
+
     private boolean sendPatientEmailConfirmations = true;
     private boolean sendPatientSmsReminders = false;
 
@@ -53,6 +57,9 @@ public class OperationalSettings {
 
     public int getNoShowGraceMinutes() { return noShowGraceMinutes; }
     public void setNoShowGraceMinutes(int noShowGraceMinutes) { this.noShowGraceMinutes = noShowGraceMinutes; }
+
+    public int getPayByDeadlineHours() { return payByDeadlineHours; }
+    public void setPayByDeadlineHours(int payByDeadlineHours) { this.payByDeadlineHours = payByDeadlineHours; }
 
     public boolean isSendPatientEmailConfirmations() { return sendPatientEmailConfirmations; }
     public void setSendPatientEmailConfirmations(boolean sendPatientEmailConfirmations) { this.sendPatientEmailConfirmations = sendPatientEmailConfirmations; }
