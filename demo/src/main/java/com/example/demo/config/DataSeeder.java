@@ -91,6 +91,7 @@ public class DataSeeder implements CommandLineRunner {
             ensureSuperAdminExists();
             seedTimeSlotsIfEmpty();
             ensureFacilityDemoData();
+            ensureDemoMedicalProfiles();
             log.info("Database already seeded — skipping");
             return;
         }
@@ -195,6 +196,7 @@ public class DataSeeder implements CommandLineRunner {
 
         // Facility-plane demo accounts + departments (web dashboard login)
         ensureFacilityDemoData();
+        ensureDemoMedicalProfiles();
     }
 
     /**
@@ -376,6 +378,52 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     /**
+     * Mobile medical profile demo data (ARCHITECTURE.md §8 P1) — mirrors the
+     * pulse-mobile store seeds (medical-store, insurance-store). Idempotent:
+     * only fills patients whose structured fields are still null, so it runs
+     * on both fresh and already-seeded databases.
+     */
+    private void ensureDemoMedicalProfiles() {
+        // [phone, bloodGroup, allergiesJson, conditionsJson, medicationsJson,
+        //  vitalsJson, ecName, ecRelationship, ecPhone]
+        String[][] profiles = {
+                {"+233 24 111 0001", "O+",
+                        "[{\"id\":\"al-0001\",\"label\":\"Penicillin\",\"type\":\"drug\"}]",
+                        "[{\"id\":\"co-0001\",\"label\":\"Asthma\"}]",
+                        "[{\"id\":\"me-0001\",\"name\":\"Ventolin Inhaler\",\"dose\":\"100mcg, as needed\"}]",
+                        "[{\"id\":\"vt-0001\",\"date\":\"2026-08-18\",\"systolic\":\"120\",\"diastolic\":\"80\",\"pulseBpm\":\"72\",\"temperatureC\":\"36.8\",\"heightCm\":\"178\",\"weightKg\":\"74\"}]",
+                        "Ama Quarcoo", "Sister", "+233 20 987 6543"},
+                {"+233 24 111 0002", "A+",
+                        "[]", "[]",
+                        "[{\"id\":\"me-0002\",\"name\":\"Lisinopril\",\"dose\":\"10mg, once daily\"}]",
+                        "[{\"id\":\"vt-0002\",\"date\":\"2026-08-12\",\"systolic\":\"118\",\"diastolic\":\"76\",\"pulseBpm\":\"68\",\"temperatureC\":\"36.6\",\"heightCm\":\"165\",\"weightKg\":\"61\"}]",
+                        "Yaw Asante", "Brother", "+233 20 111 2233"},
+                {"+233 24 111 0003", "B+",
+                        "[{\"id\":\"al-0002\",\"label\":\"Aspirin\",\"type\":\"drug\"}]",
+                        "[{\"id\":\"co-0002\",\"label\":\"Hypertension\"}]",
+                        "[{\"id\":\"me-0003\",\"name\":\"Metformin\",\"dose\":\"500mg, twice daily\"}]",
+                        "[]",
+                        "Adjoa Ofori", "Wife", "+233 24 555 7788"},
+        };
+
+        for (String[] row : profiles) {
+            patientRepository.findByPhone(row[0]).ifPresent(p -> {
+                if (p.getAllergiesJson() == null) {
+                    p.setAllergiesJson(row[2]);
+                    p.setConditionsJson(row[3]);
+                    p.setMedicationsJson(row[4]);
+                    p.setVitalsJson(row[5]);
+                    p.setEmergencyContactName(row[6]);
+                    p.setEmergencyContactRelationship(row[7]);
+                    p.setEmergencyContactPhone(row[8]);
+                    patientRepository.save(p);
+                }
+            });
+        }
+        log.info("✅ Demo medical profiles ensured (P1 mobile)");
+    }
+
+    /**
      * Hibernate ddl-auto=update does not reliably ALTER existing tables for
      * new columns (it added the hospitals columns but skipped staff_members
      * in the Phase 6 bring-up). Run the same idempotent ADD COLUMN IF NOT
@@ -389,7 +437,16 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS region varchar(255)");
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS facility_type varchar(255) DEFAULT 'hospital'");
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS logo_url varchar(255)");
-        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane)");
+        // Mobile self-service medical profile (P1): structured JSON fields +
+        // emergency contact, kept in sync with the legacy flat columns.
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies_json TEXT");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS conditions_json TEXT");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS medications_json TEXT");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS vitals_json TEXT");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_name varchar(255)");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_relationship varchar(255)");
+        jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_phone varchar(255)");
+        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane, patients mobile medical)");
     }
 
     /**
@@ -517,12 +574,18 @@ public class DataSeeder implements CommandLineRunner {
                         phone, "Kumasi, Ghana",
                         "GHA-00000000" + (phone.endsWith("10") ? "0" : phone.substring(phone.length() - 1)),
                         passwordEncoder.encode("patient123"));
+                p.setPatientNumber(row[5]);
+                p.setBloodType(row[6]);
+                p.setAllergies(row[7].isEmpty() ? null : row[7]);
+                p.setCurrentMedications(row[8]);
+                p.setLatestVitals(row[9]);
             }
-            p.setPatientNumber(row[5]);
-            p.setBloodType(row[6]);
-            p.setAllergies(row[7].isEmpty() ? null : row[7]);
-            p.setCurrentMedications(row[8]);
-            p.setLatestVitals(row[9]);
+            // Existing patients: NEVER re-apply demo clinical values — the
+            // mobile app edits these (P1 medical profile) and this seeder
+            // used to clobber them on every boot. Only backfill the number.
+            if (p.getPatientNumber() == null) {
+                p.setPatientNumber(row[5]);
+            }
             patientRepository.save(p);
         }
 

@@ -59,6 +59,26 @@ public class Patient {
     @Column(columnDefinition = "TEXT")
     private String latestVitals;
 
+    // ===== Mobile self-service medical profile (ARCHITECTURE.md §8 P1) =====
+    // Structured, mobile-shaped fields. The flat web fields above are kept
+    // in sync (both populated) so the web dashboard contract never breaks.
+
+    @Column(columnDefinition = "TEXT")
+    private String allergiesJson;      // JSON [{id,label,type}]
+
+    @Column(columnDefinition = "TEXT")
+    private String conditionsJson;     // JSON [{id,label}]
+
+    @Column(columnDefinition = "TEXT")
+    private String medicationsJson;    // JSON [{id,name,dose}]
+
+    @Column(columnDefinition = "TEXT")
+    private String vitalsJson;         // JSON [{id,date,systolic,...}] — history
+
+    private String emergencyContactName;
+    private String emergencyContactRelationship;
+    private String emergencyContactPhone;
+
     private LocalDateTime registeredAt;
 
     @ManyToMany
@@ -132,6 +152,27 @@ public class Patient {
 
     public String getLatestVitals() { return latestVitals; }
     public void setLatestVitals(String latestVitals) { this.latestVitals = latestVitals; }
+
+    public String getAllergiesJson() { return allergiesJson; }
+    public void setAllergiesJson(String allergiesJson) { this.allergiesJson = allergiesJson; }
+
+    public String getConditionsJson() { return conditionsJson; }
+    public void setConditionsJson(String conditionsJson) { this.conditionsJson = conditionsJson; }
+
+    public String getMedicationsJson() { return medicationsJson; }
+    public void setMedicationsJson(String medicationsJson) { this.medicationsJson = medicationsJson; }
+
+    public String getVitalsJson() { return vitalsJson; }
+    public void setVitalsJson(String vitalsJson) { this.vitalsJson = vitalsJson; }
+
+    public String getEmergencyContactName() { return emergencyContactName; }
+    public void setEmergencyContactName(String emergencyContactName) { this.emergencyContactName = emergencyContactName; }
+
+    public String getEmergencyContactRelationship() { return emergencyContactRelationship; }
+    public void setEmergencyContactRelationship(String emergencyContactRelationship) { this.emergencyContactRelationship = emergencyContactRelationship; }
+
+    public String getEmergencyContactPhone() { return emergencyContactPhone; }
+    public void setEmergencyContactPhone(String emergencyContactPhone) { this.emergencyContactPhone = emergencyContactPhone; }
 
     public LocalDateTime getRegisteredAt() { return registeredAt; }
     public void setRegisteredAt(LocalDateTime registeredAt) { this.registeredAt = registeredAt; }
