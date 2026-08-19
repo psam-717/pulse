@@ -206,7 +206,7 @@ Rules:
 - **Prevention:** any new `@Scheduled` job must land with `@EnableScheduling`
   in the same PR (or confirm it is already on).
 
-### 3.8 Cancelled bookings still own `time_slot_id` (OneToOne unique)
+### 3.7 Cancelled bookings still own `time_slot_id` (OneToOne unique)
 - **When:** P3 (Aug 18 2026).
 - **Symptom:** after the expiry job releases a slot (`isBooked=false`),
   availability shows the time as free, but `POST /api/bookings/mobile`
@@ -222,45 +222,7 @@ Rules:
   attach" under a OneToOne. Check `existsByTimeSlotId` or null the
   association on cancel.
 
-### 3.9 Aza `amount` is pesewas, Pulse stores GHS
-- **When:** P4 (Aug 18 2026).
-- **Symptom:** charging ₵20.00 as `"amount": 20` would undercharge by 100x
-  (or ₵50.00 as 50 instead of 5000).
-- **Root cause:** Aza's public developer landing (aza.systems/developers)
-  charges ₵50.00 with `"amount": 5000`. That is pesewas (minor units).
-  `Booking.amountDue` is `BigDecimal` GHS. The login-walled API explorer
-  was not opened in this packet (no key yet).
-- **Fix:** convert exactly once in `AzaAmountConverter.toMinorUnits`
-  (`movePointRight(2)`). Never send GHS to Aza and never store pesewas on
-  `Booking`.
-- **Prevention:** any new Aza call goes through the converter. If a later
-  key proves the unit is GHS, change only that class.
-
-### 3.10 Aza webhook is permit-all; we verify the session id
-- **When:** P4 (Aug 18 2026).
-- **Symptom:** Aza cannot send our patient JWT, so a 401 on
-  `POST /api/webhooks/aza` would drop every real confirmation.
-- **Root cause:** public Aza pages do not document a webhook signature
-  header. The packet's "anon → 401 on webhook" check conflicts with
-  "permit-all, verify".
-- **Fix:** `POST /api/webhooks/aza` is permit-all. We require the session
-  id to exist on a `PaymentTransaction` we created. If `AZA_WEBHOOK_SECRET`
-  is set we also check `X-Aza-Signature` / `X-Webhook-Secret`. Duplicate
-  `checkout.completed` deliveries are no-ops (status already COMPLETED).
-- **Prevention:** never put the webhook behind patient JWT. Bookings flip
-  PAID only here — never on `POST /payments`.
-
-### 3.11 Aza has no stored-instrument API
-- **When:** P4 (Aug 18 2026).
-- **Detail:** merchant checkout is hosted (`POST /api/v1/merchant/sessions`
-  → `pay.aza.systems/c/cs_...`). There is no tokenized card/MoMo charge
-  endpoint. `PaymentMethod` rows are display metadata (network, label,
-  last4). `gatewayToken` on the mobile shape maps to the Aza session id
-  on `PaymentTransaction`, not a reusable instrument.
-- **Prevention:** never treat `methodId` as something you can charge
-  without opening a new Aza session.
-
-### 3.7 A department with availability but no doctors cannot be booked
+### 3.8 A department with availability but no doctors cannot be booked
 - **When:** P3 (Aug 18 2026).
 - **Symptom:** `GET /api/mobile/departments/17/availability` returns a full
   14-day grid (P2 synthesizes slots even with zero doctors) but
@@ -272,38 +234,45 @@ Rules:
 - **Prevention:** any department used in the mobile book flow needs at
   least one `Doctor` row. Don't assume availability implies bookability.
 
-### 3.8 Aza payments: amount unit is likely PESEWAS, not GHS (P4)
-- **When:** P4 planning, Aug 18 2026 (before Grok Build's implementation).
-- **Symptom:** Aza's public landing example shows "Charge a customer ₵50.00"
-  with request body `"amount": 5000` — i.e. amounts in minor units (pesewas).
-  Charging `20.00` as GHS would silently charge ₵20 vs ₵0.20 — or vice versa.
-- **Root cause:** the API's `amount` field is denominated in pesewas
-  (100 pesewas = 1 GHS); our `Booking.amountDue` is a `BigDecimal` in GHS.
-- **Fix:** convert exactly once in a dedicated `AzaAmountConverter`
-  (`GHS → minor units = amount.movePointRight(2)`). Confirm the unit in the
-  Aza API Explorer (login-walled) before trusting the landing example.
-- **Prevention:** document the unit in code + here; test with a real test key.
+### 3.9 Aza `amount` is pesewas, Pulse stores GHS (P4)
+- **When:** P4 (Aug 18 2026) — planning + implementation by two agents.
+- **Symptom:** charging ₵20.00 as `"amount": 20` would undercharge by 100x
+  (or ₵50.00 as 50 instead of 5000).
+- **Root cause:** Aza's public developer landing (aza.systems/developers)
+  charges ₵50.00 with `"amount": 5000` — i.e. pesewas (minor units).
+  `Booking.amountDue` is `BigDecimal` in GHS. The login-walled API explorer
+  was not opened in this packet (no key yet).
+- **Fix:** convert exactly once in `AzaAmountConverter.toMinorUnits`
+  (`movePointRight(2)`). Never send GHS to Aza and never store pesewas on
+  `Booking`.
+- **Prevention:** any new Aza call goes through the converter. If a later
+  key proves the unit is GHS, change only that class.
 
-### 3.9 Aza has NO stored-instrument API — PaymentMethod rows are display metadata (P4)
-- **When:** P4 planning, Aug 18 2026.
-- **Symptom:** expecting to save a MoMo/card token server-side and charge it
-  later, like Paystack/Hubtel.
-- **Root cause:** Aza's merchant API is **hosted-checkout only** — the customer
-  pays inside the Aza app; MoMo/card rails are Aza's concern. There is no
-  merchant endpoint to store chargeable instruments.
-- **Fix:** `PaymentMethod` rows store only display metadata (network, label,
-  last4). Charging = create an Aza checkout session → return the hosted URL →
-  mobile opens it → `checkout.completed` webhook flips bookings to PAID.
-  Map the mobile `gatewayToken` field to the Aza **session id** (`cs_...`).
-- **Prevention:** never design around server-side stored instruments with Aza.
+### 3.10 Aza webhook is permit-all; we verify the session id (P4)
+- **When:** P4 (Aug 18 2026).
+- **Symptom:** Aza cannot send our patient JWT, so a 401 on
+  `POST /api/webhooks/aza` would drop every real confirmation.
+- **Root cause:** public Aza pages do not document a webhook signature
+  header. The packet's "anon → 401 on webhook" check conflicts with
+  "permit-all, verify".
+- **Fix:** `POST /api/webhooks/aza` is permit-all. We require the session
+  id to exist on a `PaymentTransaction` we created. If `AZA_WEBHOOK_SECRET`
+  is set we also check `X-Aza-Signature` / `X-Webhook-Secret`. The webhook
+  is the ONLY thing that marks a booking PAID — never optimistic-confirm.
+  Duplicate `checkout.completed` deliveries are no-ops (transaction already
+  COMPLETED → return 200, no duplicate history entries).
+- **Prevention:** never put the webhook behind patient JWT; dedupe by
+  `azaSessionId`.
 
-### 3.10 Aza webhook: confirm only via webhook, idempotently (P4)
-- **When:** P4 planning, Aug 18 2026.
-- **Detail:** `POST /api/webhooks/aza` is the only thing that marks a booking
-  PAID — never optimistic-confirm. Aza retries webhook delivery, so the
-  handler must be idempotent: if the `PaymentTransaction` is already
-  COMPLETED, return 200 and do nothing (no duplicate history entries).
-- **Prevention:** check transaction status first; dedupe by `azaSessionId`.
+### 3.11 Aza has no stored-instrument API (P4)
+- **When:** P4 (Aug 18 2026).
+- **Detail:** merchant checkout is hosted (`POST /api/v1/merchant/sessions`
+  → `pay.aza.systems/c/cs_...`). There is no tokenized card/MoMo charge
+  endpoint. `PaymentMethod` rows are display metadata (network, label,
+  last4). `gatewayToken` on the mobile shape maps to the Aza session id
+  on `PaymentTransaction`, not a reusable instrument.
+- **Prevention:** never treat `methodId` as something you can charge
+  without opening a new Aza session.
 
 ---
 
