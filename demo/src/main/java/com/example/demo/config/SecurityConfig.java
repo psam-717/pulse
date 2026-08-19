@@ -65,6 +65,8 @@ public class SecurityConfig {
                 // UUID filenames + extension whitelist keep them unguessable;
                 // WRITES stay authenticated.
                 .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                // Aza cannot send our JWT — verify by session id (and optional secret).
+                .requestMatchers(HttpMethod.POST, "/api/webhooks/aza").permitAll()
                 // Facility-plane (web dashboard) — staff auth required; role
                 // checks are @PreAuthorize on the controllers
                 .requestMatchers("/api/departments/**", "/api/staff/**", "/api/appointments/**",

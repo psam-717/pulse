@@ -21,7 +21,10 @@ import com.example.demo.model.StaffRole;
 import com.example.demo.model.TimeSlot;
 import com.example.demo.model.VerificationStatus;
 import com.example.demo.model.WorkingHours;
+import com.example.demo.model.PaymentMethod;
+import com.example.demo.model.PaymentNetwork;
 import com.example.demo.repository.BookingRepository;
+import com.example.demo.repository.PaymentMethodRepository;
 import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.DoctorRepository;
 import com.example.demo.repository.HospitalAdminRepository;
@@ -58,6 +61,7 @@ public class DataSeeder implements CommandLineRunner {
     private final QueueEntryRepository queueEntryRepository;
     private final OperationalSettingsRepository operationalSettingsRepository;
     private final WorkingHoursRepository workingHoursRepository;
+    private final PaymentMethodRepository paymentMethodRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
 
@@ -72,6 +76,7 @@ public class DataSeeder implements CommandLineRunner {
                       QueueEntryRepository queueEntryRepository,
                       OperationalSettingsRepository operationalSettingsRepository,
                       WorkingHoursRepository workingHoursRepository,
+                      PaymentMethodRepository paymentMethodRepository,
                       org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
@@ -84,6 +89,7 @@ public class DataSeeder implements CommandLineRunner {
         this.queueEntryRepository = queueEntryRepository;
         this.operationalSettingsRepository = operationalSettingsRepository;
         this.workingHoursRepository = workingHoursRepository;
+        this.paymentMethodRepository = paymentMethodRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
@@ -100,6 +106,7 @@ public class DataSeeder implements CommandLineRunner {
             ensureDemoMedicalProfiles();
             ensureDiscoveryDemoData();
             ensureDemoInsurance();
+            ensureDemoPaymentMethods();
             log.info("Database already seeded — skipping");
             return;
         }
@@ -207,6 +214,7 @@ public class DataSeeder implements CommandLineRunner {
         ensureDemoMedicalProfiles();
         ensureDiscoveryDemoData();
         ensureDemoInsurance();
+        ensureDemoPaymentMethods();
     }
 
     /**
@@ -220,7 +228,10 @@ public class DataSeeder implements CommandLineRunner {
         try {
             jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_payment_status_check");
             jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check");
-            // Covers PaymentStatus.REFUNDED and BookingStatus.PENDING_PAYMENT (P3).
+            jdbcTemplate.execute("ALTER TABLE payment_transactions DROP CONSTRAINT IF EXISTS payment_transactions_status_check");
+            jdbcTemplate.execute("ALTER TABLE patient_payment_methods DROP CONSTRAINT IF EXISTS patient_payment_methods_network_check");
+            // Covers PaymentStatus.REFUNDED, BookingStatus.PENDING_PAYMENT (P3),
+            // and P4 payment_transactions / payment method network enums.
             log.info("✅ Repaired stale booking CHECK constraints (bookings_payment_status_check / bookings_status_check)");
         } catch (Exception e) {
             log.warn("Booking constraint repair skipped: {}", e.getMessage());
@@ -458,6 +469,26 @@ public class DataSeeder implements CommandLineRunner {
             });
         }
         log.info("✅ Demo insurance records ensured (P2 mobile)");
+    }
+
+    /**
+     * Display-only payment method for PT-00101 (ARCHITECTURE.md §8 P4).
+     * Idempotent: only inserts when the patient has zero methods so a
+     * DELETE from the app survives reboot.
+     */
+    private void ensureDemoPaymentMethods() {
+        patientRepository.findByPhone("+233 24 111 0001").ifPresent(p -> {
+            if (paymentMethodRepository.countByPatientId(p.getId()) > 0) return;
+            PaymentMethod m = new PaymentMethod();
+            m.setPatientId(p.getId());
+            m.setNetwork(PaymentNetwork.mtn_momo);
+            m.setLast4("4567");
+            m.setLabel("MTN MoMo •••• 4567");
+            m.setGatewayToken(null);
+            m.setDefault(true);
+            paymentMethodRepository.save(m);
+        });
+        log.info("✅ Demo payment methods ensured (P4 mobile)");
     }
 
     /**
