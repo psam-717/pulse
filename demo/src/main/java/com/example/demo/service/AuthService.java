@@ -96,6 +96,7 @@ public class AuthService {
         // Try to find by phone first, then ghanaCard
         Patient patient = patientRepository.findByPhone(identifier)
                 .or(() -> patientRepository.findByGhanaCard(identifier))
+                .or(() -> patientRepository.findByPatientNumber(identifier))
                 .orElseThrow(() -> new IllegalArgumentException("Patient not found with the provided identifier"));
 
         if (!passwordEncoder.matches(request.password(), patient.getPassword())) {
