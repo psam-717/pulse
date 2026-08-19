@@ -35,4 +35,8 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     java.util.List<QueueEntry> findByPatientNameIgnoreCase(String patientName);
 
     java.util.Optional<QueueEntry> findByTicketNumber(String ticketNumber);
+
+    java.util.List<QueueEntry> findByPatientIdAndStatusIn(Long patientId, List<QueueStatus> statuses);
+
+    java.util.Optional<QueueEntry> findByBookingId(Long bookingId);
 }

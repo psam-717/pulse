@@ -194,8 +194,13 @@ public class AppointmentService {
             priority = QueuePriority.ROUTINE;
         }
 
-        return new QueueEntry(ticket, patientNameOf(booking), deptId,
+        QueueEntry entry = new QueueEntry(ticket, patientNameOf(booking), deptId,
                 priority, PatientSource.APPOINTMENT, now);
+        if (booking.getPatient() != null) {
+            entry.setPatientId(booking.getPatient().getId());
+        }
+        entry.setBookingId(booking.getId());
+        return entry;
     }
 
     private void removeQueueEntriesFor(Booking booking) {

@@ -23,8 +23,14 @@ import com.example.demo.model.VerificationStatus;
 import com.example.demo.model.WorkingHours;
 import com.example.demo.model.PaymentMethod;
 import com.example.demo.model.PaymentNetwork;
+import com.example.demo.model.VisitRecord;
+import com.example.demo.model.LabResultRecord;
+import com.example.demo.model.PrescriptionRecord;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.PaymentMethodRepository;
+import com.example.demo.repository.VisitRecordRepository;
+import com.example.demo.repository.LabResultRecordRepository;
+import com.example.demo.repository.PrescriptionRecordRepository;
 import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.DoctorRepository;
 import com.example.demo.repository.HospitalAdminRepository;
@@ -62,6 +68,9 @@ public class DataSeeder implements CommandLineRunner {
     private final OperationalSettingsRepository operationalSettingsRepository;
     private final WorkingHoursRepository workingHoursRepository;
     private final PaymentMethodRepository paymentMethodRepository;
+    private final VisitRecordRepository visitRecordRepository;
+    private final LabResultRecordRepository labResultRecordRepository;
+    private final PrescriptionRecordRepository prescriptionRecordRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
 
@@ -77,6 +86,9 @@ public class DataSeeder implements CommandLineRunner {
                       OperationalSettingsRepository operationalSettingsRepository,
                       WorkingHoursRepository workingHoursRepository,
                       PaymentMethodRepository paymentMethodRepository,
+                      VisitRecordRepository visitRecordRepository,
+                      LabResultRecordRepository labResultRecordRepository,
+                      PrescriptionRecordRepository prescriptionRecordRepository,
                       org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
@@ -90,6 +102,9 @@ public class DataSeeder implements CommandLineRunner {
         this.operationalSettingsRepository = operationalSettingsRepository;
         this.workingHoursRepository = workingHoursRepository;
         this.paymentMethodRepository = paymentMethodRepository;
+        this.visitRecordRepository = visitRecordRepository;
+        this.labResultRecordRepository = labResultRecordRepository;
+        this.prescriptionRecordRepository = prescriptionRecordRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
@@ -107,6 +122,7 @@ public class DataSeeder implements CommandLineRunner {
             ensureDiscoveryDemoData();
             ensureDemoInsurance();
             ensureDemoPaymentMethods();
+            ensureDemoMedicalRecords();
             log.info("Database already seeded — skipping");
             return;
         }
@@ -215,6 +231,7 @@ public class DataSeeder implements CommandLineRunner {
         ensureDiscoveryDemoData();
         ensureDemoInsurance();
         ensureDemoPaymentMethods();
+        ensureDemoMedicalRecords();
     }
 
     /**
@@ -472,6 +489,98 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     /**
+     * Read-only medical records for PT-00101 matching pulse-mobile
+     * records-store seeds. Idempotent by publicId.
+     */
+    private void ensureDemoMedicalRecords() {
+        Patient p = patientRepository.findByPhone("+233 24 111 0001").orElse(null);
+        if (p == null) return;
+        Long pid = p.getId();
+
+        seedVisit(pid, "visit-1", "General OPD", "KNUST University Hospital",
+                java.time.LocalDate.parse("2025-10-12"), "Dr. E. Arhin",
+                "Treated for acute Malaria. Prescribed Artemether-Lumefantrine. Patient advised to rest and hydrate.");
+        seedVisit(pid, "visit-2", "Dental Clinic", "Komfo Anokye Teaching Hospital",
+                java.time.LocalDate.parse("2025-08-04"), "Dr. S. Mensah",
+                "Routine cleaning and cavity filling (Tooth 14). Patient reported mild sensitivity.");
+        seedVisit(pid, "visit-3", "Cardiology", "Korle-Bu Teaching Hospital",
+                java.time.LocalDate.parse("2024-02-15"), "Dr. K. Ofori",
+                "Annual cardiac checkup. BP 120/80. ECG normal. No murmurs detected.");
+        seedVisit(pid, "visit-4", "Eye Clinic", "KNUST University Hospital",
+                java.time.LocalDate.parse("2023-11-02"), "Dr. A. Boateng",
+                "Routine vision screening. Prescribed reading glasses, +1.00 both eyes.");
+
+        seedLab(pid, "lab-1", "Full Blood Count (FBC)", "KNUST University Hospital",
+                "Dr. E. Arhin", java.time.LocalDate.parse("2025-10-12"),
+                "[{\"name\":\"Hemoglobin\",\"value\":\"13.5\",\"unit\":\"g/dL\",\"referenceRange\":\"12.0 - 16.0 g/dL\"},{\"name\":\"White Cell Count\",\"value\":\"6.2\",\"unit\":\"×10⁹/L\",\"referenceRange\":\"4.0 - 11.0 ×10⁹/L\"},{\"name\":\"Platelets\",\"value\":\"250\",\"unit\":\"×10⁹/L\",\"referenceRange\":\"150 - 450 ×10⁹/L\"}]");
+        seedLab(pid, "lab-2", "Malaria Blood Film", "KNUST University Hospital",
+                "Dr. E. Arhin", java.time.LocalDate.parse("2025-10-12"),
+                "[{\"name\":\"Result\",\"value\":\"Positive (P. falciparum)\"}]");
+        seedLab(pid, "lab-3", "Fasting Blood Glucose", "Komfo Anokye Teaching Hospital",
+                "Dr. S. Mensah", java.time.LocalDate.parse("2025-08-04"),
+                "[{\"name\":\"Glucose\",\"value\":\"5.4\",\"unit\":\"mmol/L\",\"referenceRange\":\"3.9 - 5.6 mmol/L\"}]");
+        seedLab(pid, "lab-4", "Lipid Profile", "Korle-Bu Teaching Hospital",
+                "Dr. K. Ofori", java.time.LocalDate.parse("2024-02-15"),
+                "[{\"name\":\"Total Cholesterol\",\"value\":\"4.8\",\"unit\":\"mmol/L\",\"referenceRange\":\"< 5.2 mmol/L\"},{\"name\":\"LDL\",\"value\":\"2.6\",\"unit\":\"mmol/L\",\"referenceRange\":\"< 3.4 mmol/L\"},{\"name\":\"HDL\",\"value\":\"1.3\",\"unit\":\"mmol/L\",\"referenceRange\":\"> 1.0 mmol/L\"},{\"name\":\"Triglycerides\",\"value\":\"1.1\",\"unit\":\"mmol/L\",\"referenceRange\":\"< 1.7 mmol/L\"}]");
+
+        seedRx(pid, "rx-1", "Artemether-Lumefantrine",
+                "80mg/480mg — twice daily for 3 days",
+                "Dr. E. Arhin", "KNUST University Hospital",
+                java.time.LocalDate.parse("2025-10-12"));
+        seedRx(pid, "rx-2", "Amoxicillin",
+                "500mg — three times daily for 7 days",
+                "Dr. S. Mensah", "Komfo Anokye Teaching Hospital",
+                java.time.LocalDate.parse("2025-08-04"));
+        seedRx(pid, "rx-3", "Atorvastatin",
+                "10mg — once daily at night",
+                "Dr. K. Ofori", "Korle-Bu Teaching Hospital",
+                java.time.LocalDate.parse("2024-02-15"));
+        log.info("✅ Demo medical records ensured for PT-00101 (P5)");
+    }
+
+    private void seedVisit(Long patientId, String publicId, String department, String hospital,
+                           java.time.LocalDate date, String doctor, String summary) {
+        if (visitRecordRepository.existsByPatientIdAndPublicId(patientId, publicId)) return;
+        VisitRecord v = new VisitRecord();
+        v.setPatientId(patientId);
+        v.setPublicId(publicId);
+        v.setDepartment(department);
+        v.setHospital(hospital);
+        v.setVisitDate(date);
+        v.setDoctor(doctor);
+        v.setSummary(summary);
+        visitRecordRepository.save(v);
+    }
+
+    private void seedLab(Long patientId, String publicId, String testName, String hospital,
+                         String orderingDoctor, java.time.LocalDate date, String valuesJson) {
+        if (labResultRecordRepository.existsByPatientIdAndPublicId(patientId, publicId)) return;
+        LabResultRecord r = new LabResultRecord();
+        r.setPatientId(patientId);
+        r.setPublicId(publicId);
+        r.setTestName(testName);
+        r.setHospital(hospital);
+        r.setOrderingDoctor(orderingDoctor);
+        r.setResultDate(date);
+        r.setValuesJson(valuesJson);
+        labResultRecordRepository.save(r);
+    }
+
+    private void seedRx(Long patientId, String publicId, String medication, String dose,
+                        String doctor, String hospital, java.time.LocalDate date) {
+        if (prescriptionRecordRepository.existsByPatientIdAndPublicId(patientId, publicId)) return;
+        PrescriptionRecord r = new PrescriptionRecord();
+        r.setPatientId(patientId);
+        r.setPublicId(publicId);
+        r.setMedication(medication);
+        r.setDose(dose);
+        r.setPrescribingDoctor(doctor);
+        r.setHospital(hospital);
+        r.setPrescribedDate(date);
+        prescriptionRecordRepository.save(r);
+    }
+
+    /**
      * Display-only payment method for PT-00101 (ARCHITECTURE.md §8 P4).
      * Idempotent: only inserts when the patient has zero methods so a
      * DELETE from the app survives reboot.
@@ -648,6 +757,9 @@ public class DataSeeder implements CommandLineRunner {
         // P3: pay-by deadline on bookings + operational window (default 48h).
         jdbcTemplate.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pay_by_deadline timestamp");
         jdbcTemplate.execute("ALTER TABLE operational_settings ADD COLUMN IF NOT EXISTS pay_by_deadline_hours integer DEFAULT 48");
+        // P5: patient queue ticket linkage on existing queue_entries.
+        jdbcTemplate.execute("ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS patient_id bigint");
+        jdbcTemplate.execute("ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS booking_id bigint");
         // Use NOW()+48h, not booking_date+48h: booking_date is the create
         // instant, so old unpaid demo rows would expire on the first job tick.
         jdbcTemplate.update("""
@@ -655,7 +767,7 @@ public class DataSeeder implements CommandLineRunner {
                    SET pay_by_deadline = NOW() + INTERVAL '48 hours'
                  WHERE pay_by_deadline IS NULL
                 """);
-        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane, patients mobile medical + insurance, bookings pay-by)");
+        log.info("✅ Settings columns ensured (staff_members prefs, hospitals settings-plane, patients mobile medical + insurance, bookings pay-by, queue patient linkage)");
     }
 
     /**

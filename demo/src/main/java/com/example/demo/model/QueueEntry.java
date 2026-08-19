@@ -50,6 +50,12 @@ public class QueueEntry {
 
     private String room;
 
+    /** Patient linkage for mobile GET /queue/me (walk-ins may stay null). */
+    private Long patientId;
+
+    /** Booking that produced this ticket (appointment check-in). */
+    private Long bookingId;
+
     public QueueEntry() {}
 
     public QueueEntry(String ticketNumber, String patientName, String departmentId,
@@ -96,4 +102,10 @@ public class QueueEntry {
 
     public String getRoom() { return room; }
     public void setRoom(String room) { this.room = room; }
+
+    public Long getPatientId() { return patientId; }
+    public void setPatientId(Long patientId) { this.patientId = patientId; }
+
+    public Long getBookingId() { return bookingId; }
+    public void setBookingId(Long bookingId) { this.bookingId = bookingId; }
 }

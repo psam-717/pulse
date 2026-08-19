@@ -320,12 +320,25 @@ Rules:
   grow beyond the 99-file baseline. Never "fix" the drift with `--fix` during
   verification (that's a code change, not a check).
 
-### 5.2 No test suite, no API layer — verify honestly
-- **Detail:** no Jest/RNTL config (no test script), zero network calls in `src/`
-  (all screens hardcoded/mock). There is NO live E2E against the backend yet.
-- **Report rule:** say "no tests configured" and "UI shell — not yet verifiable
-  against backend". Never claim tests pass or that mobile↔backend integration
-  works.
+### 5.2 No test suite — verify honestly (API layer added in P5)
+- **Detail:** still no Jest/RNTL. P5 added `src/lib/api/*` + store hydration.
+  Live mode is `EXPO_PUBLIC_USE_MOCK=false` + `EXPO_PUBLIC_API_URL`.
+- **Report rule:** say "no tests configured". Do not claim on-device E2E unless
+  you ran Expo Go / an emulator. Typecheck + `expo export` remain the gates.
+
+### 5.5 Android emulator `localhost` is the emulator, not the host
+- **When:** P5 (Aug 19 2026).
+- **Symptom:** Expo Android cannot reach `http://localhost:8080/api`.
+- **Root cause:** on the AVD, `localhost` is the emulator loopback.
+- **Fix:** `src/lib/api/client.ts` rewrites `localhost` → `10.0.2.2` on Android.
+  Physical devices need the machine LAN IP in `EXPO_PUBLIC_API_URL`.
+- **Prevention:** never hard-code `localhost` for mobile without a platform check.
+
+### 5.6 `GET /queue/me` 404 is the empty-ticket state
+- **When:** P5.
+- **Detail:** a patient with no checked-in booking gets 404 + guidance, not an
+  empty object. The mobile client treats 404 as "no ticket" (`getMyTicket` →
+  `null`) and keeps the last seeded card only in mock mode.
 
 ### 5.3 `expo-doctor` patch mismatches are advisory
 - **Detail:** expo 54.0.36 vs ~54.0.37, expo-constants 18.0.13 vs ~18.0.14 —

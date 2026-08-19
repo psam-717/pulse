@@ -4,8 +4,12 @@ import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CallNextRequest;
 import com.example.demo.dto.QueueDepartmentResponse;
 import com.example.demo.dto.QueueEntryResponse;
+import com.example.demo.dto.QueueTicketResponse;
 import com.example.demo.dto.UpdateQueueStatusRequest;
+import com.example.demo.service.PatientQueueService;
 import com.example.demo.service.QueueService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,9 +26,28 @@ import java.util.List;
 public class QueueController {
 
     private final QueueService queueService;
+    private final PatientQueueService patientQueueService;
 
-    public QueueController(QueueService queueService) {
+    public QueueController(QueueService queueService, PatientQueueService patientQueueService) {
         this.queueService = queueService;
+        this.patientQueueService = patientQueueService;
+    }
+
+    private static Long currentPatientId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return (Long) auth.getPrincipal();
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<QueueTicketResponse> myTicket() {
+        return ResponseEntity.ok(patientQueueService.myTicket(currentPatientId()));
+    }
+
+    @PostMapping("/me/check-in")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<QueueTicketResponse> checkIn() {
+        return ResponseEntity.ok(patientQueueService.checkIn(currentPatientId()));
     }
 
     @GetMapping("/departments")

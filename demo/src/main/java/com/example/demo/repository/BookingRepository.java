@@ -16,6 +16,8 @@ import java.util.List;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByPatientId(Long patientId);
+
+    List<Booking> findByPatientIdAndCheckedInTrueAndStatusNot(Long patientId, BookingStatus status);
     Page<Booking> findByPatientId(Long patientId, Pageable pageable);
     Page<Booking> findByDoctorId(Long doctorId, Pageable pageable);
     boolean existsByPatientIdAndTimeSlotId(Long patientId, Long timeSlotId);
