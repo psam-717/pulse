@@ -2,11 +2,13 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.MedicalProfileResponse;
+import com.example.demo.dto.MedicalRecordsResponse;
 import com.example.demo.dto.PatientProfileResponse;
 import com.example.demo.dto.UpdateMedicalProfileRequest;
 import com.example.demo.dto.UpdatePatientProfileRequest;
 import com.example.demo.dto.AddVitalsRequest;
 import com.example.demo.service.PatientProfileService;
+import com.example.demo.service.PatientRecordsService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,9 +27,12 @@ import org.springframework.web.bind.annotation.*;
 public class PatientProfileController {
 
     private final PatientProfileService patientProfileService;
+    private final PatientRecordsService patientRecordsService;
 
-    public PatientProfileController(PatientProfileService patientProfileService) {
+    public PatientProfileController(PatientProfileService patientProfileService,
+                                    PatientRecordsService patientRecordsService) {
         this.patientProfileService = patientProfileService;
+        this.patientRecordsService = patientRecordsService;
     }
 
     private static Long currentPatientId() {
@@ -66,6 +71,12 @@ public class PatientProfileController {
     public ResponseEntity<MedicalProfileResponse> addVitals(
             @RequestBody AddVitalsRequest request) {
         return ResponseEntity.ok(patientProfileService.addVitals(currentPatientId(), request));
+    }
+
+    @GetMapping("/records")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<MedicalRecordsResponse> getRecords() {
+        return ResponseEntity.ok(patientRecordsService.getRecords(currentPatientId()));
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
