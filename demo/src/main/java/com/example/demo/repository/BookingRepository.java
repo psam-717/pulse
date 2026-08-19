@@ -22,6 +22,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     boolean existsByTimeSlotId(Long timeSlotId);
 
+    java.util.List<Booking> findByIdInAndPatient_Id(java.util.Collection<Long> ids, Long patientId);
+
     // Facility-plane: bookings for a department within a window (drives
     // Department.appointmentsToday — BACKEND_SPEC §5.3 [server-only])
     List<Booking> findByDepartmentIdAndBookingDateBetween(
