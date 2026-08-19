@@ -2,6 +2,7 @@ package com.example.demo.config;
 
 import com.example.demo.dto.ApiResponse;
 import com.example.demo.exception.ConflictException;
+import com.example.demo.exception.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -98,6 +99,12 @@ public class GlobalExceptionHandler {
     }
 
     // Business-rule conflict (e.g. department canDelete gate, queue call-next races)
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse> handleMissing(ResourceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(404, ex.getMessage()));
+    }
+
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiResponse> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
