@@ -351,6 +351,20 @@ Rules:
   The mobile app parses that exact shape. Backend availability endpoints MUST
   return it (or a superset) — see ARCHITECTURE.md §8 P2.
 
+### 5.5 Run `prettier --write` BEFORE committing (P5 regression)
+- **When:** P5 (Aug 19 2026) — post-merge verification flagged it.
+- **Symptom:** the prettier `-c` lint baseline grew 99 → 107 tracked files. 6
+  files went clean→dirty and 8 brand-new API files were never formatted.
+- **Root cause:** Grok Build wrote code and committed without running the repo's
+  formatter; `npm run lint` runs prettier `-c` which fails on unformatted files.
+  The 99-file baseline only stays 99 if every new/changed file is formatted.
+- **Fix:** before committing ANY mobile change, run
+  `npx prettier --write <changed/new files>` (or `npm run format` for the whole
+  tree). Fixed in PR #3 (`fix/mobile-prettier-drift`, 14 granular style commits).
+- **Prevention:** add formatting to the pre-commit step: `npx prettier -c <files>`
+  must pass before you push. New files are the usual culprits — format them the
+  moment you create them.
+
 ---
 
 ## 6. Git & workflow
