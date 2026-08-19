@@ -222,6 +222,44 @@ Rules:
   attach" under a OneToOne. Check `existsByTimeSlotId` or null the
   association on cancel.
 
+### 3.9 Aza `amount` is pesewas, Pulse stores GHS
+- **When:** P4 (Aug 18 2026).
+- **Symptom:** charging ₵20.00 as `"amount": 20` would undercharge by 100x
+  (or ₵50.00 as 50 instead of 5000).
+- **Root cause:** Aza's public developer landing (aza.systems/developers)
+  charges ₵50.00 with `"amount": 5000`. That is pesewas (minor units).
+  `Booking.amountDue` is `BigDecimal` GHS. The login-walled API explorer
+  was not opened in this packet (no key yet).
+- **Fix:** convert exactly once in `AzaAmountConverter.toMinorUnits`
+  (`movePointRight(2)`). Never send GHS to Aza and never store pesewas on
+  `Booking`.
+- **Prevention:** any new Aza call goes through the converter. If a later
+  key proves the unit is GHS, change only that class.
+
+### 3.10 Aza webhook is permit-all; we verify the session id
+- **When:** P4 (Aug 18 2026).
+- **Symptom:** Aza cannot send our patient JWT, so a 401 on
+  `POST /api/webhooks/aza` would drop every real confirmation.
+- **Root cause:** public Aza pages do not document a webhook signature
+  header. The packet's "anon → 401 on webhook" check conflicts with
+  "permit-all, verify".
+- **Fix:** `POST /api/webhooks/aza` is permit-all. We require the session
+  id to exist on a `PaymentTransaction` we created. If `AZA_WEBHOOK_SECRET`
+  is set we also check `X-Aza-Signature` / `X-Webhook-Secret`. Duplicate
+  `checkout.completed` deliveries are no-ops (status already COMPLETED).
+- **Prevention:** never put the webhook behind patient JWT. Bookings flip
+  PAID only here — never on `POST /payments`.
+
+### 3.11 Aza has no stored-instrument API
+- **When:** P4 (Aug 18 2026).
+- **Detail:** merchant checkout is hosted (`POST /api/v1/merchant/sessions`
+  → `pay.aza.systems/c/cs_...`). There is no tokenized card/MoMo charge
+  endpoint. `PaymentMethod` rows are display metadata (network, label,
+  last4). `gatewayToken` on the mobile shape maps to the Aza session id
+  on `PaymentTransaction`, not a reusable instrument.
+- **Prevention:** never treat `methodId` as something you can charge
+  without opening a new Aza session.
+
 ### 3.7 A department with availability but no doctors cannot be booked
 - **When:** P3 (Aug 18 2026).
 - **Symptom:** `GET /api/mobile/departments/17/availability` returns a full
