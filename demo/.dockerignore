@@ -1,0 +1,12 @@
+target/
+.git/
+.idea/
+.vscode/
+*.iml
+*.log
+uploads/
+.env
+.env.*
+README.md
+DEPLOY.md
+render.yaml
