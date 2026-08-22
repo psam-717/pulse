@@ -1,0 +1,24 @@
+# Render blueprint — Pulse API (Spring Boot 4 + Java 25 + PostgreSQL)
+# Deploy: Render dashboard → New → Blueprint → connect psam-717/pulse
+# Then set DB_URL / DB_USERNAME / DB_PASSWORD (create a free Neon project for Postgres).
+services:
+  - type: web
+    name: pulse-api
+    runtime: docker
+    repo: https://github.com/psam-717/pulse
+    branch: main
+    plan: free
+    healthCheckPath: /api/status
+    envVars:
+      - key: DB_URL
+        sync: false        # e.g. jdbc:postgresql://ep-xxx.eu-central-1.aws.neon.tech/pulse_db?sslmode=require
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # Team testing: OTPs echoed in login response + logs (no email service yet).
+      # Set to "false" before real launch.
+      - key: OTP_DEV_MODE
+        value: "true"
