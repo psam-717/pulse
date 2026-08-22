@@ -132,10 +132,12 @@ public class PatientQueueService {
     private QueueEntry buildQueueEntry(Booking booking) {
         String deptId = String.valueOf(booking.getDepartment().getId());
         LocalDateTime now = LocalDateTime.now();
-        long todayCount = queueEntryRepository.countByDepartmentIdAndCheckInAtAfter(
-                deptId, LocalDate.now().atStartOfDay());
         String prefix = departmentPrefix(booking.getDepartment());
-        String ticket = prefix + "-" + String.format("%03d", todayCount + 1);
+        // Collision-proof: next ticket = highest sequence ever issued for this prefix + 1.
+        // The old "count of today's entries + 1" scheme collided with historical/seed
+        // tickets (e.g. C-001 from a previous day) → duplicate ticket numbers.
+        long nextSeq = queueEntryRepository.maxTicketSequenceForPrefix(prefix) + 1;
+        String ticket = prefix + "-" + String.format("%03d", nextSeq);
 
         QueuePriority priority;
         try {
