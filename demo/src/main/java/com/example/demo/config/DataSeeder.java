@@ -247,6 +247,18 @@ public class DataSeeder implements CommandLineRunner {
             jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check");
             jdbcTemplate.execute("ALTER TABLE payment_transactions DROP CONSTRAINT IF EXISTS payment_transactions_status_check");
             jdbcTemplate.execute("ALTER TABLE patient_payment_methods DROP CONSTRAINT IF EXISTS patient_payment_methods_network_check");
+            // Guard against duplicate queue ticket numbers (the Aug 2026 collision bug:
+            // ticket generator reused seed numbers). Hibernate ddl-auto never adds
+            // constraints to existing tables, so create it explicitly.
+            jdbcTemplate.execute("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                                       WHERE conname = 'uk_queue_entries_ticket_number') THEN
+                            ALTER TABLE queue_entries
+                                ADD CONSTRAINT uk_queue_entries_ticket_number UNIQUE (ticket_number);
+                        END IF;
+                    END $$;""");
             // Covers PaymentStatus.REFUNDED, BookingStatus.PENDING_PAYMENT (P3),
             // and P4 payment_transactions / payment method network enums.
             log.info("✅ Repaired stale booking CHECK constraints (bookings_payment_status_check / bookings_status_check)");
@@ -924,7 +936,7 @@ public class DataSeeder implements CommandLineRunner {
                 {"G-003", "Kwesi Appiah", "13", "WAITING", "ROUTINE", "WALK_IN", "3", null, null, null},
         };
         for (String[] row : queue) {
-            if (queueEntryRepository.findByTicketNumber(row[0]).isPresent()) continue;
+            if (queueEntryRepository.countByTicketNumber(row[0]) > 0) continue;
             QueueEntry e = new QueueEntry(row[0], row[1], row[2],
                     QueuePriority.valueOf(row[4]), PatientSource.valueOf(row[5]),
                     LocalDateTime.now().minusMinutes(Long.parseLong(row[6])));
