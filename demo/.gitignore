@@ -5,6 +5,12 @@ target/
 !**/src/test/**/target/
 .hermes-tmp*
 
+# Secrets — never commit these
+.env
+.env.local
+.env.*.local
+src/main/resources/application-local.properties
+
 ### STS ###
 .apt_generated
 .classpath
