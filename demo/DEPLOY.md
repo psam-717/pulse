@@ -1,7 +1,8 @@
 # Deploying the Pulse API to Render
 
 This service runs the verified backend (Spring Boot 4.0.4 / Java 25 / PostgreSQL) on Render
-for team testing and as the target URL for the mobile API layer (P6).
+(live at https://pulse-o3gj.onrender.com) for team testing and as the target URL for the
+mobile API layer (P5).
 
 ## One-time setup (≈ 10 min)
 
@@ -11,7 +12,7 @@ for team testing and as the target URL for the mobile API layer (P6).
 2. **Create a Render account** → [render.com](https://render.com) (email + card; free tier OK)
 3. **Deploy the blueprint**:
    - Render dashboard → **New → Blueprint** → connect `psam-717/pulse` → it reads `render.yaml`
-   - Service `pulse-api` is created with placeholders → fill:
+   - Service `pulse` is created with placeholders → fill:
      | Env var | Value |
      |---|---|
      | `DB_URL` | your Neon connection string |
@@ -20,7 +21,7 @@ for team testing and as the target URL for the mobile API layer (P6).
      | `JWT_SECRET` | auto-generated (leave) |
      | `OTP_DEV_MODE` | `true` (echoes OTPs for testing) |
    - **Deploy** → first build takes ~5 min (Maven + image pull)
-4. **Verify**: open `https://pulse-api.onrender.com/api/status` → `{"status":"up",...}`
+4. **Verify**: open `https://pulse-o3gj.onrender.com/api/status` → `{"status":"up",...}`
 
 ## Keeping the free tier awake
 
@@ -28,11 +29,12 @@ Free web services spin down after 15 min idle (first request after sleep = slow 
 Pick one keep-alive (every ~10 min):
 
 - **Hermes cron (simplest)**: a `no_agent` cron pings `/api/status` every 10 min —
-  ask Hermes to create it ("keep-alive cron for the Render API").
-- **UptimeRobot (external)**: free monitor on `https://pulse-api.onrender.com/api/status`,
+  already running as the **Pulse API Keep-Alive** cron (silent when healthy, Telegram
+  alert on failure).
+- **UptimeRobot (external)**: free monitor on `https://pulse-o3gj.onrender.com/api/status`,
   5-min interval — zero local resources.
 - **DO droplet cron**: if you keep the droplet, add
-  `*/10 * * * * curl -s -o /dev/null https://pulse-api.onrender.com/api/status`
+  `*/10 * * * * curl -s -o /dev/null https://pulse-o3gj.onrender.com/api/status`
 
 ## Redeploys
 
