@@ -7,6 +7,9 @@ services:
     runtime: docker
     repo: https://github.com/psam-717/pulse
     branch: main
+    # Backend project lives in the repo's demo/ subdirectory (repo root also
+    # contains docs/, PLAN.md, README.md, test_rbac.py).
+    rootDir: demo
     plan: free
     healthCheckPath: /api/status
     envVars:
