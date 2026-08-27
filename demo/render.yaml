@@ -3,7 +3,7 @@
 # Then set DB_URL / DB_USERNAME / DB_PASSWORD (create a free Neon project for Postgres).
 services:
   - type: web
-    name: pulse-api
+    name: pulse
     runtime: docker
     repo: https://github.com/psam-717/pulse
     branch: main
