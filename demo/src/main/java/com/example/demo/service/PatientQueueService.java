@@ -7,6 +7,7 @@ import com.example.demo.model.Booking;
 import com.example.demo.model.BookingStatus;
 import com.example.demo.model.Department;
 import com.example.demo.model.Doctor;
+import com.example.demo.model.Hospital;
 import com.example.demo.model.OperationalSettings;
 import com.example.demo.model.Patient;
 import com.example.demo.model.PatientSource;
@@ -14,6 +15,7 @@ import com.example.demo.model.QueueEntry;
 import com.example.demo.model.QueuePriority;
 import com.example.demo.model.QueueStatus;
 import com.example.demo.repository.BookingRepository;
+import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.OperationalSettingsRepository;
 import com.example.demo.repository.PatientRepository;
 import com.example.demo.repository.QueueEntryRepository;
@@ -42,15 +44,18 @@ public class PatientQueueService {
 
     private final QueueEntryRepository queueEntryRepository;
     private final BookingRepository bookingRepository;
+    private final DepartmentRepository departmentRepository;
     private final PatientRepository patientRepository;
     private final OperationalSettingsRepository operationalSettingsRepository;
 
     public PatientQueueService(QueueEntryRepository queueEntryRepository,
                                BookingRepository bookingRepository,
+                               DepartmentRepository departmentRepository,
                                PatientRepository patientRepository,
                                OperationalSettingsRepository operationalSettingsRepository) {
         this.queueEntryRepository = queueEntryRepository;
         this.bookingRepository = bookingRepository;
+        this.departmentRepository = departmentRepository;
         this.patientRepository = patientRepository;
         this.operationalSettingsRepository = operationalSettingsRepository;
     }
@@ -197,18 +202,33 @@ public class PatientQueueService {
         Booking booking = mine.getBookingId() != null
                 ? bookingRepository.findById(mine.getBookingId()).orElse(null)
                 : null;
-        String hospitalName = booking != null && booking.getHospital() != null
-                ? booking.getHospital().getName()
-                : "Hospital";
-        String departmentName = booking != null && booking.getDepartment() != null
-                ? booking.getDepartment().getName()
-                : "Department";
+        // Prefer the booking's hospital/department; fall back to the queue
+        // entry's own department (seeded entries and walk-ins have no booking,
+        // so hardcoded "Hospital"/"Department" placeholders leaked into the
+        // ticket — ARCHITECTURE.md P5 queue shape).
+        Department department = booking != null ? booking.getDepartment()
+                : resolveDepartment(mine.getDepartmentId());
+        Hospital hospital = department != null ? department.getHospital() : null;
+        if (hospital == null && booking != null) {
+            hospital = booking.getHospital();
+        }
+        String hospitalName = hospital != null ? hospital.getName() : "—";
+        String departmentName = department != null ? department.getName() : "—";
         String doctorName = doctorNameOf(mine, booking);
         String room = mine.getRoom() != null ? mine.getRoom() : "—";
 
         return new QueueTicketResponse(
                 hospitalName, departmentName, doctorName,
                 currentNumber, userNumber, waitMins, room, estimated);
+    }
+
+    private Department resolveDepartment(String departmentId) {
+        if (departmentId == null || departmentId.isBlank()) return null;
+        try {
+            return departmentRepository.findById(Long.parseLong(departmentId)).orElse(null);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static int nextCalledNumber(List<QueueEntry> dept) {
