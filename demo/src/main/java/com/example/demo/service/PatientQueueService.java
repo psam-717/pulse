@@ -1,5 +1,6 @@
 package com.example.demo.service;
 
+import com.example.demo.dto.QueueCancelResponse;
 import com.example.demo.dto.QueueTicketResponse;
 import com.example.demo.exception.ConflictException;
 import com.example.demo.exception.ResourceNotFoundException;
@@ -101,6 +102,37 @@ public class PatientQueueService {
             queueEntryRepository.save(entry);
         }
         return toTicket(entry, patientId);
+    }
+
+    /**
+     * Patient cancels their own live queue ticket (bug-triage BE-2, unblocks FE-4).
+     * The linked booking is released (checked-in state cleared) so the patient
+     * can re-check-in if they change their mind.
+     */
+    @Transactional
+    public QueueCancelResponse cancelMyTicket(Long patientId) {
+        QueueEntry mine = findActiveEntry(patientId);
+        if (mine == null) {
+            throw new ResourceNotFoundException(
+                    "No active queue ticket to cancel. Check in at the hospital for today's booking first.");
+        }
+        if (mine.getStatus() == QueueStatus.IN_CONSULTATION) {
+            throw new ConflictException("You are being attended to now and cannot cancel your ticket.");
+        }
+
+        String ticketNumber = mine.getTicketNumber();
+        mine.setStatus(QueueStatus.CANCELLED);
+        queueEntryRepository.save(mine);
+
+        if (mine.getBookingId() != null) {
+            bookingRepository.findById(mine.getBookingId()).ifPresent(booking -> {
+                booking.setCheckedIn(false);
+                booking.setCheckInTime(null);
+                booking.setAppointmentStatus(null);
+                bookingRepository.save(booking);
+            });
+        }
+        return new QueueCancelResponse("Queue ticket cancelled", ticketNumber);
     }
 
     private QueueEntry findActiveEntry(Long patientId) {
