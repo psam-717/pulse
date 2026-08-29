@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CallNextRequest;
+import com.example.demo.dto.QueueCancelResponse;
 import com.example.demo.dto.QueueDepartmentResponse;
 import com.example.demo.dto.QueueEntryResponse;
 import com.example.demo.dto.QueueTicketResponse;
@@ -48,6 +49,12 @@ public class QueueController {
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<QueueTicketResponse> checkIn() {
         return ResponseEntity.ok(patientQueueService.checkIn(currentPatientId()));
+    }
+
+    @PostMapping("/me/cancel")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<QueueCancelResponse> cancelMyTicket() {
+        return ResponseEntity.ok(patientQueueService.cancelMyTicket(currentPatientId()));
     }
 
     @GetMapping("/departments")
