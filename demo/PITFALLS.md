@@ -106,6 +106,9 @@ Rules:
   idempotently before entity queries.
 - **Prevention:** when adding an enum value, check `ensureConstraintRepair()`
   covers the table.
+- **Aug 29 2026:** `QueueStatus.CANCELLED` (patient self-cancel, BE-2) was
+  rejected by `queue_entries_status_check` → added the drop to
+  `ensureConstraintRepair()` alongside the bookings/payment ones.
 
 ### 2.4 Local postgres password is a secret — don't try to read it
 - **When:** Aug 18 2026.
@@ -263,6 +266,20 @@ Rules:
   COMPLETED → return 200, no duplicate history entries).
 - **Prevention:** never put the webhook behind patient JWT; dedupe by
   `azaSessionId`.
+
+### 3.12 Login errors must be uniform — distinct messages leak account existence
+- **When:** Aug 29 2026 (mobile test pass, bug-triage BE-1).
+- **Symptom:** `POST /api/auth/patient/login` returned "Patient not found with
+  the provided identifier" for an unknown ID but "Invalid password" for a wrong
+  password — an attacker can enumerate valid patient IDs.
+- **Root cause:** the not-found and password-mismatch branches threw different
+  `IllegalArgumentException` messages.
+- **Fix:** `AuthService.patientLogin` now returns one message
+  ("Invalid patient ID or password") for both, and verifies the password
+  against a **dummy bcrypt hash** when the identifier is unknown so the two
+  failure paths also take ~equal time (no timing side-channel).
+- **Prevention:** never differentiate "account missing" from "password wrong"
+  in any auth endpoint (staff login, patient login, OTP, PINs).
 
 ### 3.11 Aza has no stored-instrument API (P4)
 - **When:** P4 (Aug 18 2026).
