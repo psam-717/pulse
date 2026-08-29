@@ -96,9 +96,11 @@ public class QueueService {
 
         boolean legal = switch (entry.getStatus()) {
             case WAITING -> target == QueueStatus.IN_CONSULTATION
-                    || target == QueueStatus.NO_SHOW || target == QueueStatus.SKIPPED;
+                    || target == QueueStatus.NO_SHOW || target == QueueStatus.SKIPPED
+                    || target == QueueStatus.CANCELLED;
             case IN_CONSULTATION -> target == QueueStatus.COMPLETED
                     || target == QueueStatus.NO_SHOW;
+            case CANCELLED -> false; // terminal
             default -> false; // completed / no_show / skipped are terminal
         };
         if (!legal) {
