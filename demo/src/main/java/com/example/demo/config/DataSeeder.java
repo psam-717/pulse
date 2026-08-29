@@ -247,6 +247,9 @@ public class DataSeeder implements CommandLineRunner {
             jdbcTemplate.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check");
             jdbcTemplate.execute("ALTER TABLE payment_transactions DROP CONSTRAINT IF EXISTS payment_transactions_status_check");
             jdbcTemplate.execute("ALTER TABLE patient_payment_methods DROP CONSTRAINT IF EXISTS patient_payment_methods_network_check");
+            // QueueStatus gained CANCELLED (patient cancel, bug-triage BE-2) —
+            // the original check constraint still blocks it at the DB layer.
+            jdbcTemplate.execute("ALTER TABLE queue_entries DROP CONSTRAINT IF EXISTS queue_entries_status_check");
             // Guard against duplicate queue ticket numbers (the Aug 2026 collision bug:
             // ticket generator reused seed numbers). Hibernate ddl-auto never adds
             // constraints to existing tables, so create it explicitly.
