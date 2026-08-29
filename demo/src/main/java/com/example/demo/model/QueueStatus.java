@@ -6,5 +6,6 @@ public enum QueueStatus {
     IN_CONSULTATION,
     COMPLETED,
     NO_SHOW,
-    SKIPPED
+    SKIPPED,
+    CANCELLED
 }
