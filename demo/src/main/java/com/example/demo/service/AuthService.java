@@ -28,6 +28,9 @@ public class AuthService {
     private final PatientRepository patientRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    /** Verified against when the identifier is unknown so both login failure
+     *  paths do ~equal bcrypt work (no timing side-channel for enumeration). */
+    private final String dummyPasswordHash;
 
     public AuthService(PendingRegistrationRepository pendingRepo,
                        PatientRepository patientRepository,
@@ -35,6 +38,7 @@ public class AuthService {
         this.pendingRepo = pendingRepo;
         this.patientRepository = patientRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
+        this.dummyPasswordHash = this.passwordEncoder.encode("pulse-invalid-password-placeholder");
         this.jwtUtil = jwtUtil;
     }
 
@@ -93,14 +97,19 @@ public class AuthService {
     public AuthResponse patientLogin(PatientLoginRequest request) {
         String identifier = request.identifier();
 
-        // Try to find by phone first, then ghanaCard
+        // Try to find by phone first, then ghanaCard, then patient number
         Patient patient = patientRepository.findByPhone(identifier)
                 .or(() -> patientRepository.findByGhanaCard(identifier))
                 .or(() -> patientRepository.findByPatientNumber(identifier))
-                .orElseThrow(() -> new IllegalArgumentException("Patient not found with the provided identifier"));
+                .orElse(null);
 
-        if (!passwordEncoder.matches(request.password(), patient.getPassword())) {
-            throw new IllegalArgumentException("Invalid password");
+        // Uniform error + equalized work: an unknown identifier still runs the
+        // bcrypt check against a dummy hash, so both failure paths behave
+        // identically (message AND timing). Distinct messages leaked which
+        // part failed → patient-ID enumeration (bug-triage BE-1).
+        String storedHash = patient != null ? patient.getPassword() : dummyPasswordHash;
+        if (!passwordEncoder.matches(request.password(), storedHash)) {
+            throw new IllegalArgumentException("Invalid patient ID or password");
         }
 
         String token = jwtUtil.generateToken(patient.getId(), "PATIENT");
