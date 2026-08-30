@@ -89,7 +89,8 @@ public class MobileDiscoveryService {
                         d.getId(),
                         d.getName(),
                         d.getConsultationFee(),
-                        d.getDescription()))
+                        d.getDescription(),
+                        !doctorRepository.findByDepartmentId(d.getId()).isEmpty()))
                 .toList();
     }
 
