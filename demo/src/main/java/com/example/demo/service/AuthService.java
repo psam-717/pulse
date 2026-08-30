@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.config.JwtUtil;
 import com.example.demo.dto.AuthResponse;
 import com.example.demo.dto.PatientLoginRequest;
+import com.example.demo.util.GhanaPhoneValidator;
 import com.example.demo.dto.SignupRequest;
 import com.example.demo.dto.VerifyOtpRequest;
 import com.example.demo.model.Patient;
@@ -44,7 +45,7 @@ public class AuthService {
 
     @Transactional
     public void initiateSignup(SignupRequest request) {
-        String phone = request.phone();
+        String phone = GhanaPhoneValidator.requireValid(request.phone(), "Phone number");
 
         // Replace any existing pending registration for this number
         pendingRepo.findByPhone(phone).ifPresent(pendingRepo::delete);
