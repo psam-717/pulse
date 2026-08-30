@@ -10,5 +10,6 @@ public record DepartmentOptionResponse(
         Long id,
         String name,
         BigDecimal consultationFee,
-        String description
+        String description,
+        boolean hasDoctors
 ) {}
