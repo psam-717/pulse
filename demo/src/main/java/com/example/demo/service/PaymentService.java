@@ -168,13 +168,15 @@ public class PaymentService {
         if (total.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Nothing to charge — booking fees total 0.");
         }
-        long minor = AzaAmountConverter.toMinorUnits(total);
-        CheckoutSession session = paymentGateway.createSession(minor, "GHS");
+        long azaAmount = AzaAmountConverter.toAzaAmount(total);
+        CheckoutSession session = paymentGateway.createSession(azaAmount, "GHS");
 
         PaymentTransaction tx = new PaymentTransaction();
         tx.setPatientId(patientId);
         tx.setAzaSessionId(session.sessionId());
-        tx.setAmountMinor(minor);
+        // Amount as sent to Aza (their `amount` field is GHS major units —
+        // see AzaAmountConverter; bug-triage BE-5).
+        tx.setAmountMinor(azaAmount);
         tx.setStatus(PaymentTxnStatus.PENDING);
         tx.setMethodId(method.getId());
         tx.setProvider("aza");

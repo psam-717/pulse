@@ -5,5 +5,12 @@ package com.example.demo.payment;
  */
 public interface PaymentGateway {
 
-    CheckoutSession createSession(long amountMinor, String currency);
+    /**
+     * Create a hosted checkout session.
+     *
+     * @param amount   Aza's {@code amount} field — GHS major units, NOT pesewas
+     *                 (empirically verified Aug 2026; see {@link AzaAmountConverter}).
+     * @param currency ISO currency code, e.g. "GHS"
+     */
+    CheckoutSession createSession(long amount, String currency);
 }

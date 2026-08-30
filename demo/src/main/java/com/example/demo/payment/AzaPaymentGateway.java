@@ -11,7 +11,8 @@ import java.util.Map;
 
 /**
  * Live Aza merchant checkout: {@code POST /api/v1/merchant/sessions}.
- * Auth is {@code X-Api-Key}. Amount is pesewas (see {@link AzaAmountConverter}).
+ * Auth is {@code X-Api-Key}. Amount is GHS major units, NOT pesewas
+ * (see {@link AzaAmountConverter}; bug-triage BE-5).
  */
 public class AzaPaymentGateway implements PaymentGateway {
 
