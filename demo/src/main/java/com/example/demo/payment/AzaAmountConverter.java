@@ -5,27 +5,26 @@ import java.math.RoundingMode;
 
 /**
  * Converts Pulse GHS ({@code Booking.amountDue}, e.g. 20.00) to the integer
- * Aza {@code amount} field.
+ * {@code amount} field Aza expects on {@code POST /api/v1/merchant/sessions}.
  *
- * <p>Public Aza docs (aza.systems/developers) charge ₵50.00 as
- * {@code "amount": 5000} — pesewas, i.e. minor units. Confirmed from the
- * landing example; the login-walled API explorer was not used (no key in
- * this packet). Convert exactly once, here.
+ * <p><b>Unit semantics — empirically verified 2026-08-30:</b> Aza's
+ * {@code amount} field is <b>GHS major units</b>, NOT pesewas. Probe:
+ * creating a session with {@code amount: 1} renders "GH₵ 1.00" on the hosted
+ * checkout (pay.aza.systems/c/...) — if it were pesewas it would render
+ * "GH₵ 0.01". The public docs example ("Charge a customer ₵50.00" →
+ * {@code {"amount": 5000}}) is therefore WRONG: that request actually charges
+ * ₵5,000.00. First reported to Aza by Pulse (bug-triage BE-5); their docs
+ * still show the incorrect example. Convert exactly once, here.
  */
 public final class AzaAmountConverter {
 
     private AzaAmountConverter() {}
 
-    /** GHS → pesewas. 20.00 → 2000. */
-    public static long toMinorUnits(BigDecimal ghs) {
+    /** Pulse GHS → Aza {@code amount}. 20.00 → 20. Whole cedis, HALF_UP. */
+    public static long toAzaAmount(BigDecimal ghs) {
         if (ghs == null) {
             throw new IllegalArgumentException("Amount in GHS is required.");
         }
-        return ghs.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact();
-    }
-
-    /** Pesewas → GHS. 2000 → 20.00. */
-    public static BigDecimal toGhs(long minorUnits) {
-        return BigDecimal.valueOf(minorUnits).movePointLeft(2).setScale(2, RoundingMode.UNNECESSARY);
+        return ghs.setScale(0, RoundingMode.HALF_UP).longValueExact();
     }
 }
