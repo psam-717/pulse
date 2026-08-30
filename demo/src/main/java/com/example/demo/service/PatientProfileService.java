@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.dto.MedicalProfileResponse;
 import com.example.demo.dto.PatientProfileResponse;
 import com.example.demo.dto.UpdateMedicalProfileRequest;
+import com.example.demo.util.GhanaPhoneValidator;
 import com.example.demo.dto.UpdatePatientProfileRequest;
 import com.example.demo.dto.AddVitalsRequest;
 import com.example.demo.model.Patient;
@@ -60,6 +61,7 @@ public class PatientProfileService {
         }
         if (req.email() != null && !req.email().isBlank()) p.setEmail(req.email().trim());
         if (req.phone() != null && !req.phone().isBlank()) {
+            GhanaPhoneValidator.requireValid(req.phone(), "Phone number");
             patientRepository.findByPhone(req.phone())
                     .filter(existing -> !existing.getId().equals(patientId))
                     .ifPresent(existing -> {
@@ -70,6 +72,7 @@ public class PatientProfileService {
         }
         if (req.address() != null && !req.address().isBlank()) p.setAddress(req.address().trim());
         if (req.emergencyContact() != null) {
+            GhanaPhoneValidator.requireValid(req.emergencyContact().phone(), "Emergency contact phone");
             p.setEmergencyContactName(req.emergencyContact().name());
             p.setEmergencyContactRelationship(req.emergencyContact().relationship());
             p.setEmergencyContactPhone(req.emergencyContact().phone());

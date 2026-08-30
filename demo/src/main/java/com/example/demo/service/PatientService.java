@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.dto.CreatePatientRequest;
 import com.example.demo.dto.PatientResponse;
 import com.example.demo.dto.RecordVitalsRequest;
+import com.example.demo.util.GhanaPhoneValidator;
 import com.example.demo.dto.UpdateClinicalRecordRequest;
 import com.example.demo.dto.UpdatePatientRequest;
 import com.example.demo.model.Department;
@@ -66,6 +67,7 @@ public class PatientService {
 
     @Transactional
     public PatientResponse create(CreatePatientRequest request) {
+        GhanaPhoneValidator.requireValid(request.phone(), "Phone number");
         if (patientRepository.findByPhone(request.phone()).isPresent()) {
             throw new IllegalArgumentException(
                     "A patient with phone " + request.phone() + " is already registered.");
@@ -100,6 +102,7 @@ public class PatientService {
             p.setGender(mapGender(request.gender()));
         }
         if (request.phone() != null && !request.phone().isBlank()) {
+            GhanaPhoneValidator.requireValid(request.phone(), "Phone number");
             patientRepository.findByPhone(request.phone())
                     .filter(existing -> !existing.getId().equals(id))
                     .ifPresent(existing -> {
