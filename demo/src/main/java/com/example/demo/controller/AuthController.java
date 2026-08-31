@@ -2,7 +2,10 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.AuthResponse;
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.ForgotPasswordRequest;
+import com.example.demo.dto.ForgotPasswordResponse;
 import com.example.demo.dto.PatientLoginRequest;
+import com.example.demo.dto.ResetPasswordRequest;
 import com.example.demo.dto.SignupRequest;
 import com.example.demo.dto.VerifyOtpRequest;
 import com.example.demo.service.AuthService;
@@ -42,6 +45,18 @@ public class AuthController {
         @PostMapping("/login")
         public ResponseEntity<AuthResponse> login(@RequestBody PatientLoginRequest request) {
         return ResponseEntity.ok(authService.patientLogin(request));
+    }
+
+    @SecurityRequirements()
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ForgotPasswordResponse> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.ok(authService.forgotPassword(request));
+    }
+
+    @SecurityRequirements()
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse> resetPassword(@RequestBody ResetPasswordRequest request) {
+        return ResponseEntity.ok(authService.resetPassword(request));
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
