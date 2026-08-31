@@ -49,6 +49,7 @@ public class SecurityConfig {
                 // Public auth endpoints
                 .requestMatchers("/api/auth/patient/signup", "/api/auth/patient/verify-otp").permitAll()
                 .requestMatchers("/api/auth/patient/login", "/api/auth/doctor/login").permitAll()
+                .requestMatchers("/api/auth/patient/forgot-password", "/api/auth/patient/reset-password").permitAll()
                 .requestMatchers("/api/auth/login", "/api/auth/login/verify-otp").permitAll()
                 .requestMatchers("/api/auth/admin/**").permitAll()
                 // Hospital registration & login -- public
