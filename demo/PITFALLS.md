@@ -285,7 +285,29 @@ Rules:
   against a **dummy bcrypt hash** when the identifier is unknown so the two
   failure paths also take ~equal time (no timing side-channel).
 - **Prevention:** never differentiate "account missing" from "password wrong"
-  in any auth endpoint (staff login, patient login, OTP, PINs).
+  in any auth endpoint (staff login, patient login, OTP, PINs). Same rule for
+  forgot-password: the response is uniform whether or not the identifier maps
+  to an account (BE-11, Aug 31 2026).
+
+### 3.13 Derived `deleteByXxx` ≠ bulk delete — deferred removal collides with same-tx INSERTs
+- **When:** Aug 31 2026 (BE-11, `AuthService.initiateSignup` re-signup path).
+- **Symptom:** re-signup with a phone that already has a pending registration →
+  409 `duplicate key value violates unique constraint "pending_registrations_phone_key"`,
+  and the old row survives. The log shows `select ... where phone=?` then `insert`
+  — there is no DELETE statement.
+- **Root cause:** Spring Data **derived** delete methods (`deleteByPhone`) are
+  implemented as *load the matching entities, then defer `em.remove()` to flush*.
+  At flush Hibernate executes the INSERT before the deferred DELETE, so the new
+  row collides with the old row's unique key; the transaction rolls back and the
+  old row is untouched. (`deleteByEmail` on login_otps never collides only
+  because login_otps.email has no unique constraint.)
+- **Fix:** use a bulk delete with `@Modifying @Query("delete from X where ...")` —
+  it executes the DELETE statement immediately. Caller must still be
+  `@Transactional` (a modifying query needs a transaction).
+- **Prevention:** any delete-then-insert of the same unique key needs a bulk
+  `@Modifying` delete (or an explicit `flush()` between the derived delete and
+  the save). Reads + `save()` alone never need a transaction; modifying queries
+  always do.
 
 ### 3.11 Aza has no stored-instrument API (P4)
 - **When:** P4 (Aug 18 2026).
