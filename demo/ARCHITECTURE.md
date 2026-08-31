@@ -131,7 +131,7 @@
 
 | Controller | Path | Methods | Plane |
 |---|---|---|---|
-| `AuthController` | `/auth/patient` | `POST /signup` (phone OTP), `POST /verify-otp`, `POST /login` (identifier = phone **or** Ghana Card) | mobile |
+| `AuthController` | `/auth/patient` | `POST /signup` (phone OTP), `POST /verify-otp`, `POST /login` (identifier = phone **or** Ghana Card), `POST /forgot-password`, `POST /reset-password` | mobile |
 | `StaffAuthController` | `/auth` | `POST /login`, `POST /login/verify-otp`, `GET /me` | web |
 | `AdminController` | `/auth/admin` | `POST /login`, `POST /create-doctor` | web |
 | `HospitalController` | `/hospitals` | `GET` (paged), `GET /{hospitalId}`, `POST /register`, `POST /login`, `POST /{hospitalId}/departments`, `DELETE /{hospitalId}/departments/{departmentId}`, `PUT|GET /{hospitalId}/working-hours`, `POST|GET /{hospitalId}/license` | both |
@@ -283,6 +283,7 @@ interface HospitalAvailability {
 
 - **Mobile login:** `POST /api/auth/patient/login` `{identifier, password}` → `AuthResponse{token, role:"PATIENT", userId, message}`. Store token in AsyncStorage; attach `Authorization: Bearer <token>` to every request. (Login accepts phone or Ghana Card — matches the mobile login screen.)
 - **Mobile signup:** `POST /api/auth/patient/signup` `{fullName, phone, password, ghanaCard}` → OTP to phone → `POST /verify-otp` `{phone, code}` → then login.
+- **Mobile forgot-password:** `POST /api/auth/patient/forgot-password` `{identifier}` → uniform message (+ `devOtp` in dev mode) → `POST /api/auth/patient/reset-password` `{identifier, otp, newPassword}` → success. Identifier = phone, Ghana Card, or patient number; code single-use, 5-min expiry, 5-attempt lockout; new password min 8 chars.
 - **Staff (web):** `POST /api/auth/login` → `{token:null, devOtp, session}` → `POST /api/auth/login/verify-otp` → JWT. Not used by mobile.
 - **401 handling:** mobile must clear token + route to `/login` on any 401 (mirror web's interceptor).
 
