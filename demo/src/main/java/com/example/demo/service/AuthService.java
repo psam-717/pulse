@@ -67,8 +67,11 @@ public class AuthService {
     public void initiateSignup(SignupRequest request) {
         String phone = GhanaPhoneValidator.requireValid(request.phone(), "Phone number");
 
-        // Replace any existing pending registration for this number
-        pendingRepo.findByPhone(phone).ifPresent(pendingRepo::delete);
+        // Replace any existing pending registration for this number.
+        // Derived delete = executes its DELETE immediately (not deferred to
+        // flush), so the new INSERT can't collide with the old row's unique
+        // phone (PITFALLS 3.13 — the entity delete + insert ordering bug).
+        pendingRepo.deleteByPhone(phone);
 
         String otp = generateOtp();
         String hashedPassword = passwordEncoder.encode(request.password());
