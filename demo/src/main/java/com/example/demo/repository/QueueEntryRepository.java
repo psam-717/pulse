@@ -24,6 +24,12 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
 
     List<QueueEntry> findByDepartmentIdAndStatus(String departmentId, QueueStatus status);
 
+    /** People already processed out of the line (completed / no-show / skipped) in a department. */
+    long countByDepartmentIdAndCheckInAtBeforeAndStatusIn(
+            String departmentId,
+            java.time.LocalDateTime checkInAt,
+            List<QueueStatus> statuses);
+
     long countByDepartmentIdAndStatus(String departmentId, QueueStatus status);
 
     /** Ticket number generation: entries for a department since start of day. */

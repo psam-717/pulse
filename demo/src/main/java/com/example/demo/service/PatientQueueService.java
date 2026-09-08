@@ -43,6 +43,10 @@ public class PatientQueueService {
     private static final List<QueueStatus> ACTIVE =
             List.of(QueueStatus.WAITING, QueueStatus.IN_CONSULTATION);
 
+    /** Terminal states that mean the line moved past the patient (doctor processed the entry). */
+    private static final List<QueueStatus> PROCESSED =
+            List.of(QueueStatus.COMPLETED, QueueStatus.NO_SHOW, QueueStatus.SKIPPED);
+
     private final QueueEntryRepository queueEntryRepository;
     private final BookingRepository bookingRepository;
     private final DepartmentRepository departmentRepository;
@@ -229,18 +233,27 @@ public class PatientQueueService {
                 : nextCalledNumber(dept);
         int userNumber = ticketNumeric(mine.getTicketNumber());
 
-        int positionsAhead = 0;
+        // Real queue position for the patient (not derived from ticket digits,
+        // which span multiple days via the per-prefix sequence).
+        int aheadCount = 0;
         if (mine.getStatus() != QueueStatus.IN_CONSULTATION) {
-            positionsAhead = (int) dept.stream()
+            aheadCount = (int) dept.stream()
                     .filter(e -> e.getStatus() == QueueStatus.WAITING
                             || e.getStatus() == QueueStatus.IN_CONSULTATION)
                     .filter(e -> !e.getId().equals(mine.getId()))
                     .filter(e -> !e.getCheckInAt().isAfter(mine.getCheckInAt()))
                     .count();
         }
+        long queueTotal = dept.stream()
+                .filter(e -> ACTIVE.contains(e.getStatus()))
+                .count();
+        long servedCount = mine.getCheckInAt() != null
+                ? queueEntryRepository.countByDepartmentIdAndCheckInAtBeforeAndStatusIn(
+                        deptId, mine.getCheckInAt(), PROCESSED)
+                : 0;
 
         int slotMins = slotMinutes(mine, patientId);
-        int waitMins = positionsAhead * slotMins;
+        int waitMins = aheadCount * slotMins;
         String estimated = LocalTime.now().plusMinutes(waitMins).format(DISPLAY_TIME)
                 .replace("AM", "AM").replace("PM", "PM");
 
@@ -261,10 +274,15 @@ public class PatientQueueService {
         String departmentName = department != null ? department.getName() : "—";
         String doctorName = doctorNameOf(mine, booking);
         String room = mine.getRoom() != null ? mine.getRoom() : "—";
+        Long bookingId = booking != null ? booking.getId() : null;
+        String bookingReference = booking != null
+                ? String.format("APT-%04d", booking.getId()) : null;
 
         return new QueueTicketResponse(
                 hospitalName, departmentName, doctorName,
-                currentNumber, userNumber, waitMins, room, estimated);
+                currentNumber, userNumber, waitMins, room, estimated,
+                bookingId, bookingReference,
+                (int) queueTotal, aheadCount, (int) servedCount);
     }
 
     private Department resolveDepartment(String departmentId) {
