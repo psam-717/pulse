@@ -17,5 +17,6 @@ public record AppointmentResponse(
         String status,
         String type,
         String priority,
-        String reason
+        String reason,
+        String paymentStatus
 ) {}
