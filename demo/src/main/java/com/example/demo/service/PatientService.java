@@ -82,7 +82,7 @@ public class PatientService {
                 "{no-password}");
         p.setPassword("{no-password}"); // web-registered; mobile login not enabled
         p.setBloodType(request.bloodType());
-        p.setPatientNumber(nextPatientNumber());
+        p.setPatientNumber(nextPatientNumber(patientRepository));
         return toResponse(patientRepository.save(p));
     }
 
@@ -153,7 +153,11 @@ public class PatientService {
 
     // ===== Helpers =====
 
-    private String nextPatientNumber() {
+    /**
+     * Next free patient number (PT-%05d), shared by the staff create path,
+     * the mobile signup path and the demo seeder backfill.
+     */
+    public static String nextPatientNumber(PatientRepository patientRepository) {
         Optional<Patient> top = patientRepository
                 .findTopByPatientNumberNotNullOrderByPatientNumberDesc();
         int next = top.map(p -> {

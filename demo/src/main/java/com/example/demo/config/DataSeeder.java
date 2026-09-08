@@ -43,6 +43,7 @@ import com.example.demo.repository.TimeSlotRepository;
 import com.example.demo.repository.WorkingHoursRepository;
 import com.example.demo.repository.NotificationRepository;
 import com.example.demo.repository.OperationalSettingsRepository;
+import com.example.demo.service.PatientService;
 import com.example.demo.model.OperationalSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,10 +130,10 @@ public class DataSeeder implements CommandLineRunner {
             ensureDemoInsurance();
             ensureDemoPaymentMethods();
             ensureDemoMedicalRecords();
+            ensureSignupPatientsHaveNumbers();
             log.info("Database already seeded — skipping");
             return;
         }
-
         log.info("Seeding initial data...");
 
         // --- HOSPITALS ---
@@ -877,6 +878,24 @@ public class DataSeeder implements CommandLineRunner {
         log.info("✅ Demo bookings ensured for today ({} total)", bookingRepository.count());
 
         ensureDemoPatientsAndQueue();
+    }
+
+    /**
+     * Self-registered patients (mobile signup) historically never received a
+     * patient number — assign one idempotently so every patient has the PT-
+     * code the profile DTO and login identifier expect.
+     */
+    private void ensureSignupPatientsHaveNumbers() {
+        List<Patient> missing = patientRepository.findAll().stream()
+                .filter(p -> p.getPatientNumber() == null || p.getPatientNumber().isBlank())
+                .toList();
+        for (Patient p : missing) {
+            p.setPatientNumber(PatientService.nextPatientNumber(patientRepository));
+            patientRepository.save(p);
+        }
+        if (!missing.isEmpty()) {
+            log.info("✅ Patient numbers assigned to {} existing patient(s)", missing.size());
+        }
     }
 
     /**
