@@ -5,6 +5,7 @@ import com.example.demo.dto.AppointmentDepartmentResponse;
 import com.example.demo.dto.AppointmentResponse;
 import com.example.demo.dto.AppointmentStatsResponse;
 import com.example.demo.dto.UpdateAppointmentStatusRequest;
+import com.example.demo.dto.UpdatePaymentRequest;
 import com.example.demo.service.AppointmentService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +68,15 @@ public class AppointmentController {
             @Valid @RequestBody UpdateAppointmentStatusRequest request) {
         return ResponseEntity.ok(appointmentService.updateStatus(
                 SecurityUtils.requireFacilityId(), id, request.status()));
+    }
+
+    @PatchMapping("/{id}/payment")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DOCTOR', 'NURSE', 'FRONT_DESK')")
+    public ResponseEntity<AppointmentResponse> updatePayment(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdatePaymentRequest request) {
+        return ResponseEntity.ok(appointmentService.updatePayment(
+                SecurityUtils.requireFacilityId(), id, request.paymentStatus()));
     }
 
     private static LocalDate parseDate(String value, String param) {

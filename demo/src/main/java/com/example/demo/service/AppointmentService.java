@@ -47,15 +47,18 @@ public class AppointmentService {
     private final QueueEntryRepository queueEntryRepository;
     private final DepartmentRepository departmentRepository;
     private final com.example.demo.repository.StaffMemberRepository staffMemberRepository;
+    private final PatientNotificationService patientNotificationService;
 
     public AppointmentService(BookingRepository bookingRepository,
                               QueueEntryRepository queueEntryRepository,
                               DepartmentRepository departmentRepository,
-                              com.example.demo.repository.StaffMemberRepository staffMemberRepository) {
+                              com.example.demo.repository.StaffMemberRepository staffMemberRepository,
+                              PatientNotificationService patientNotificationService) {
         this.bookingRepository = bookingRepository;
         this.queueEntryRepository = queueEntryRepository;
         this.departmentRepository = departmentRepository;
         this.staffMemberRepository = staffMemberRepository;
+        this.patientNotificationService = patientNotificationService;
     }
 
     // ===== Read =====
@@ -151,8 +154,69 @@ public class AppointmentService {
             removeQueueEntriesFor(booking);
             log.info("Appointment {} check-in undone", referenceOf(booking));
         }
+        if ("confirmed".equals(targetStatus) || "cancelled".equals(targetStatus)) {
+            notifyPatientOfBookingChange(booking, targetStatus);
+        }
 
         return toResponse(bookingRepository.save(booking));
+    }
+
+    /** Patient in-app notification when a booking is approved or cancelled. */
+    private void notifyPatientOfBookingChange(Booking booking, String targetStatus) {
+        if (booking.getPatient() == null) return;
+        boolean approved = "confirmed".equals(targetStatus);
+        String date = scheduledAt(booking) != null ? scheduledAt(booking).toLocalDate().toString() : "—";
+        String dept = booking.getDepartment() != null ? booking.getDepartment().getName() : "—";
+        String title = approved ? "Booking approved" : "Booking cancelled";
+        String body = referenceOf(booking) + " · " + dept + " · " + date
+                + (approved ? " has been approved." : " was cancelled.");
+        patientNotificationService.create(booking.getPatient().getId(),
+                "appointment", title, body, null);
+    }
+
+    /** Mark payment state for an appointment (admin/doctor, facility-scoped). */
+    @Transactional
+    public AppointmentResponse updatePayment(Long facilityId, Long id, String rawStatus) {
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Appointment not found"));
+        if (!belongsToFacility(booking, facilityId)) {
+            throw new IllegalArgumentException("Appointment not found in this facility");
+        }
+        com.example.demo.model.PaymentStatus payment;
+        try {
+            payment = com.example.demo.model.PaymentStatus.valueOf(rawStatus.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("paymentStatus must be one of: pending, paid, failed, refunded");
+        }
+        booking.setPaymentStatus(payment);
+        return toResponse(bookingRepository.save(booking));
+    }
+
+    /** Patient's own bookings (mobile "Bookings" section), newest scheduled first. */
+    @Transactional(readOnly = true)
+    public List<com.example.demo.dto.PatientBookingResponse> patientBookings(Long patientId) {
+        return bookingRepository.findByPatientId(patientId).stream()
+                .sorted(Comparator.comparing((Booking b) -> {
+                    LocalDateTime at = scheduledAt(b);
+                    return at != null ? at : LocalDateTime.MIN;
+                }).reversed())
+                .map(this::toPatientBooking)
+                .toList();
+    }
+
+    private com.example.demo.dto.PatientBookingResponse toPatientBooking(Booking b) {
+        String doctorName = b.getDoctor() != null
+                ? b.getDoctor().getFirstName() + " " + b.getDoctor().getLastName()
+                : "Unassigned";
+        LocalDateTime at = scheduledAt(b);
+        return new com.example.demo.dto.PatientBookingResponse(
+                String.valueOf(b.getId()),
+                referenceOf(b),
+                b.getDepartment() != null ? b.getDepartment().getName() : null,
+                doctorName,
+                at != null ? at.toString() : null,
+                deriveStatus(b),
+                paymentStatusOf(b));
     }
 
     // ===== Status derivation & transitions =====
@@ -250,7 +314,13 @@ public class AppointmentService {
                 deriveStatus(b),
                 "in_person",
                 b.getPriority() != null ? b.getPriority() : "routine",
-                null);
+                null,
+                paymentStatusOf(b));
+    }
+
+    private static String paymentStatusOf(Booking b) {
+        if (b.getPaymentStatus() == null) return "pending";
+        return b.getPaymentStatus().name().toLowerCase();
     }
 
     private static LocalDateTime scheduledAt(Booking b) {
