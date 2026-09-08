@@ -39,6 +39,17 @@ public class PasswordResetOtp {
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** High-entropy capability returned by the verify step (BE-11/FE #33). Null until verified. */
+    @Column(length = 64)
+    private String resetToken;
+
+    /** When the resetToken expires (short TTL — the code already proved phone ownership). */
+    private LocalDateTime tokenExpiresAt;
+
+    /** True once the resetToken was consumed by a successful password change. Nullable so the
+     *  columns can be added by ddl-auto to a table that already has rows. */
+    private Boolean tokenUsed = false;
+
     public PasswordResetOtp() {}
 
     public PasswordResetOtp(String phone, String code, LocalDateTime expiresAt) {
@@ -69,4 +80,13 @@ public class PasswordResetOtp {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public String getResetToken() { return resetToken; }
+    public void setResetToken(String resetToken) { this.resetToken = resetToken; }
+
+    public LocalDateTime getTokenExpiresAt() { return tokenExpiresAt; }
+    public void setTokenExpiresAt(LocalDateTime tokenExpiresAt) { this.tokenExpiresAt = tokenExpiresAt; }
+
+    public Boolean getTokenUsed() { return tokenUsed; }
+    public void setTokenUsed(Boolean tokenUsed) { this.tokenUsed = tokenUsed; }
 }
