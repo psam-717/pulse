@@ -212,6 +212,7 @@ public class AppointmentService {
         return new com.example.demo.dto.PatientBookingResponse(
                 String.valueOf(b.getId()),
                 referenceOf(b),
+                b.getHospital() != null ? b.getHospital().getName() : null,
                 b.getDepartment() != null ? b.getDepartment().getName() : null,
                 doctorName,
                 at != null ? at.toString() : null,
