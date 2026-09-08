@@ -970,6 +970,7 @@ public class DataSeeder implements CommandLineRunner {
                 patientRepository.count(), queueEntryRepository.count());
 
         ensureDoctorWorkspaceDemo(facility);
+        ensureLegacyDoctorsForStaff(facility);
     }
 
     /**
@@ -1308,6 +1309,71 @@ public class DataSeeder implements CommandLineRunner {
                             facility, cardio);
                     return doctorRepository.save(doc);
                 });
+    }
+
+    /**
+     * Ensure every staff DOCTOR in the facility has a matching legacy Doctor
+     * row (idempotent by email). Online (mobile) bookings may only assign
+     * staff-linked legacy doctors (OnlineBookingSupport) so the appointment
+     * is visible in that doctor's web workspace; departments whose doctors
+     * exist only as staff rows (e.g. Dr. Kusi / Dr. Owusu Bempah in
+     * Cardiology) previously had no legacy rows to book against.
+     */
+    private void ensureLegacyDoctorsForStaff(Hospital facility) {
+        int created = 0;
+        for (StaffMember s : staffMemberRepository.findByFacilityId(facility.getId())) {
+            if (s.getRole() != com.example.demo.model.StaffRole.DOCTOR) continue;
+            String email = s.getEmail();
+            if (email == null || email.isBlank()) continue;
+            boolean exists = doctorRepository.findAll().stream()
+                    .anyMatch(d -> email.trim().equalsIgnoreCase(d.getEmail()));
+            if (exists) continue;
+
+            String name = s.getName() == null ? "Doctor" : s.getName();
+            String first;
+            String last;
+            if (name.startsWith("Dr. ")) {
+                first = "Dr.";
+                last = name.substring(4).trim();
+            } else if (name.contains(" ")) {
+                String[] parts = name.trim().split("\\s+", 2);
+                first = parts[0];
+                last = parts[1];
+            } else {
+                first = name;
+                last = "";
+            }
+
+            Department dept = null;
+            String deptId = s.getDepartmentId();
+            if (deptId != null && !deptId.isBlank()) {
+                try {
+                    dept = departmentRepository.findById(Long.valueOf(deptId)).orElse(null);
+                } catch (NumberFormatException ignored) {
+                    dept = null;
+                }
+            }
+            if (dept == null) {
+                String deptName = s.getDepartmentName();
+                dept = departmentRepository.findByFacilityId(facility.getId()).stream()
+                        .filter(d -> deptName != null && deptName.equalsIgnoreCase(d.getName()))
+                        .findFirst()
+                        .orElseGet(() -> departmentRepository.findByFacilityId(facility.getId())
+                                .stream().findFirst().orElse(null));
+            }
+
+            Doctor doc = new Doctor(first, last,
+                    s.getTitle() != null && !s.getTitle().isBlank() ? s.getTitle() : "General Practice",
+                    email, s.getPhone(), null,
+                    "WEB-LEGACY-" + s.getId(),
+                    passwordEncoder.encode("Password123!"),
+                    facility, dept);
+            doctorRepository.save(doc);
+            created++;
+        }
+        if (created > 0) {
+            log.info("✅ Created {} legacy doctor rows for staff doctors", created);
+        }
     }
 
     private Patient ensurePatient(String firstName, String lastName, Gender gender,
