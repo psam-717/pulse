@@ -35,6 +35,7 @@ public class BookingService {
     private final PatientRepository patientRepository;
     private final MobileDiscoveryService mobileDiscoveryService;
     private final OperationalSettingsRepository operationalSettingsRepository;
+    private final com.example.demo.repository.StaffMemberRepository staffMemberRepository;
 
     private static final int DEFAULT_DEADLINE_HOURS = 48;
 
@@ -45,7 +46,8 @@ public class BookingService {
                           BookingRepository bookingRepository,
                           PatientRepository patientRepository,
                           MobileDiscoveryService mobileDiscoveryService,
-                          OperationalSettingsRepository operationalSettingsRepository) {
+                          OperationalSettingsRepository operationalSettingsRepository,
+                          com.example.demo.repository.StaffMemberRepository staffMemberRepository) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
         this.doctorRepository = doctorRepository;
@@ -54,6 +56,7 @@ public class BookingService {
         this.patientRepository = patientRepository;
         this.mobileDiscoveryService = mobileDiscoveryService;
         this.operationalSettingsRepository = operationalSettingsRepository;
+        this.staffMemberRepository = staffMemberRepository;
     }
 
     public Page<Hospital> listHospitals(Pageable pageable) {
@@ -369,14 +372,18 @@ public class BookingService {
     }
 
     private Doctor pickDoctor(Long departmentId, LocalDate date, LocalTime time) {
-        List<Doctor> doctors = doctorRepository.findByDepartmentId(departmentId);
-        if (doctors.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "This department has no doctors available to take bookings.");
+        Long facilityId = departmentRepository.findById(departmentId)
+                .map(com.example.demo.model.Department::getFacilityId)
+                .orElse(null);
+        List<Doctor> candidates = OnlineBookingSupport.staffLinkedDoctors(
+                doctorRepository.findByDepartmentId(departmentId), staffMemberRepository, facilityId);
+        if (candidates.isEmpty()) {
+            throw new ConflictException(
+                    "No doctors are currently available for online booking in this department.");
         }
         Doctor best = null;
         long bestCount = Long.MAX_VALUE;
-        for (Doctor d : doctors) {
+        for (Doctor d : candidates) {
             boolean busy = timeSlotRepository.findByDoctorIdAndDateAndStartTime(d.getId(), date, time)
                     .stream().anyMatch(TimeSlot::isBooked);
             if (busy) continue;
