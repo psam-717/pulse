@@ -50,6 +50,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/patient/signup", "/api/auth/patient/verify-otp").permitAll()
                 .requestMatchers("/api/auth/patient/login", "/api/auth/doctor/login").permitAll()
                 .requestMatchers("/api/auth/patient/forgot-password", "/api/auth/patient/reset-password").permitAll()
+                .requestMatchers("/api/auth/patient/password-reset/request",
+                        "/api/auth/patient/password-reset/verify",
+                        "/api/auth/patient/password-reset/confirm",
+                        "/api/auth/patient/resend-otp").permitAll()
                 .requestMatchers("/api/auth/login", "/api/auth/login/verify-otp").permitAll()
                 .requestMatchers("/api/auth/admin/**").permitAll()
                 // Hospital registration & login -- public
