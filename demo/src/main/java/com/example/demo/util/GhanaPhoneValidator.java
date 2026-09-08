@@ -45,4 +45,13 @@ public final class GhanaPhoneValidator {
         }
         return trimmed;
     }
+
+    /** Normalizes a valid Ghana number to +233XXXXXXXXX (SMS-provider form). */
+    public static String toInternational(String raw) {
+        if (raw == null) return "";
+        String s = raw.replaceAll("\\s+", "").replace("-", "");
+        if (s.startsWith("+")) return s;
+        if (s.startsWith("0")) return "+233" + s.substring(1);
+        return "+233" + s;
+    }
 }
