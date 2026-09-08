@@ -36,14 +36,15 @@ public class AppointmentController {
             @RequestParam(required = false) String departmentId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to) {
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) Long staffId) {
         Long facilityId = SecurityUtils.requireFacilityId();
         if (from != null && to != null) {
             return ResponseEntity.ok(appointmentService.listForRange(
-                    facilityId, parseDate(from, "from"), parseDate(to, "to")));
+                    facilityId, parseDate(from, "from"), parseDate(to, "to"), staffId));
         }
         LocalDate day = date != null ? parseDate(date, "date") : LocalDate.now();
-        return ResponseEntity.ok(appointmentService.listForDay(facilityId, day, departmentId, status));
+        return ResponseEntity.ok(appointmentService.listForDay(facilityId, day, departmentId, status, staffId));
     }
 
     @GetMapping("/stats")

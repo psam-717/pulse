@@ -430,6 +430,7 @@ public class DataSeeder implements CommandLineRunner {
 
         ensureDemoBookings();
         refreshStaleDemoQueueTimestamps();
+        backfillQueueClinicianIds();
     }
 
     /**
@@ -755,6 +756,9 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS region varchar(255)");
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS facility_type varchar(255) DEFAULT 'hospital'");
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS logo_url varchar(255)");
+        // Stable clinician join key for queue entries (identity fix: consumers
+        // must match clinicianId, never the mutable clinician display name).
+        jdbcTemplate.execute("ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS clinician_id bigint");
         // Mobile self-service medical profile (P1): structured JSON fields +
         // emergency contact, kept in sync with the legacy flat columns.
         jdbcTemplate.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies_json TEXT");
@@ -1136,6 +1140,40 @@ public class DataSeeder implements CommandLineRunner {
         }
         queueEntryRepository.saveAll(stale);
         log.info("🔄 Refreshed {} stale demo queue check-in timestamps", stale.size());
+    }
+
+    /**
+     * Identity-fix backfill: queue entries historically stored only the
+     * clinician's display name. On boot, stamp clinicianId onto any entry
+     * whose clinician name matches a facility staff member, so consumers can
+     * switch from name joins to the stable staff id.
+     */
+    private void backfillQueueClinicianIds() {
+        Hospital facility = hospitalRepository.findAll().stream().findFirst().orElse(null);
+        if (facility == null) return;
+        Long facilityId = facility.getId();
+        List<StaffMember> staff = staffMemberRepository.findByFacilityId(facilityId);
+        if (staff.isEmpty()) return;
+        java.util.Map<String, Long> byName = new java.util.HashMap<>();
+        for (StaffMember s : staff) {
+            if (s.getName() != null) byName.put(s.getName().trim().toLowerCase(java.util.Locale.ROOT), s.getId());
+        }
+        if (byName.isEmpty()) return;
+
+        List<String> deptIds = departmentRepository.findByFacilityId(facilityId).stream()
+                .map(d -> String.valueOf(d.getId()))
+                .toList();
+        List<QueueEntry> toFix = queueEntryRepository.findByDepartmentIdIn(deptIds).stream()
+                .filter(e -> e.getClinician() != null && e.getClinicianId() == null)
+                .filter(e -> byName.containsKey(e.getClinician().trim().toLowerCase(java.util.Locale.ROOT)))
+                .toList();
+        for (QueueEntry e : toFix) {
+            e.setClinicianId(byName.get(e.getClinician().trim().toLowerCase(java.util.Locale.ROOT)));
+        }
+        if (!toFix.isEmpty()) {
+            queueEntryRepository.saveAll(toFix);
+            log.info("🔗 Backfilled clinicianId on {} queue entries", toFix.size());
+        }
     }
 
     /**

@@ -108,6 +108,9 @@ public class QueueService {
                     .map(StaffMember::getName)
                     .ifPresent(target::setClinician);
         }
+        if (target.getClinicianId() == null) {
+            target.setClinicianId(staffId);
+        }
         queueEntryRepository.save(target);
         return QueueEntryResponse.from(target);
     }
