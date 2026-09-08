@@ -9,5 +9,6 @@ public record PaymentMethodResponse(
         String label,
         String last4,
         String gatewayToken,
-        boolean isDefault
+        boolean isDefault,
+        String accountNumber
 ) {}
