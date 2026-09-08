@@ -14,6 +14,9 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
 
     List<QueueEntry> findByDepartmentId(String departmentId);
 
+    /** Entries across a set of departments (facility-wide queue views). */
+    List<QueueEntry> findByDepartmentIdIn(java.util.Collection<String> departmentIds);
+
     /** Full waiting/active list for the facility's queue views (Phase 5 expands). */
     List<QueueEntry> findByDepartmentIdAndStatusIn(String departmentId, List<QueueStatus> statuses);
 
