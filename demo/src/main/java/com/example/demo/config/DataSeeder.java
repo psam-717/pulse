@@ -6,6 +6,7 @@ import com.example.demo.model.Department;
 import com.example.demo.model.Doctor;
 import com.example.demo.model.Gender;
 import com.example.demo.model.Hospital;
+import com.example.demo.model.Notification;
 import com.example.demo.model.HospitalAdmin;
 import com.example.demo.model.AdminRole;
 import com.example.demo.model.Patient;
@@ -40,6 +41,7 @@ import com.example.demo.repository.QueueEntryRepository;
 import com.example.demo.repository.StaffMemberRepository;
 import com.example.demo.repository.TimeSlotRepository;
 import com.example.demo.repository.WorkingHoursRepository;
+import com.example.demo.repository.NotificationRepository;
 import com.example.demo.repository.OperationalSettingsRepository;
 import com.example.demo.model.OperationalSettings;
 import org.slf4j.Logger;
@@ -72,6 +74,7 @@ public class DataSeeder implements CommandLineRunner {
     private final VisitRecordRepository visitRecordRepository;
     private final LabResultRecordRepository labResultRecordRepository;
     private final PrescriptionRecordRepository prescriptionRecordRepository;
+    private final NotificationRepository notificationRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
 
@@ -90,6 +93,7 @@ public class DataSeeder implements CommandLineRunner {
                       VisitRecordRepository visitRecordRepository,
                       LabResultRecordRepository labResultRecordRepository,
                       PrescriptionRecordRepository prescriptionRecordRepository,
+                      NotificationRepository notificationRepository,
                       org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
@@ -106,6 +110,7 @@ public class DataSeeder implements CommandLineRunner {
         this.visitRecordRepository = visitRecordRepository;
         this.labResultRecordRepository = labResultRecordRepository;
         this.prescriptionRecordRepository = prescriptionRecordRepository;
+        this.notificationRepository = notificationRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
@@ -433,6 +438,7 @@ public class DataSeeder implements CommandLineRunner {
         refreshStaleDemoQueueTimestamps();
         backfillQueueClinicianIds();
         ensureDemoClinicalRecords();
+        ensureDemoNotifications();
     }
 
     /**
@@ -1027,6 +1033,43 @@ public class DataSeeder implements CommandLineRunner {
         r2.setHospital(hospitalName);
         prescriptionRecordRepository.save(r2);
         log.info("✅ Demo clinical records seeded for {}", kwame.getFirstName());
+    }
+
+    /**
+     * Phase 3 demo feed: seed notifications for the two demo accounts so the
+     * bell has content on a fresh DB. Idempotent per recipient (only when a
+     * staff member has zero notifications).
+     */
+    private void ensureDemoNotifications() {
+        seedForStaff("sarah.jenkins@knust-hospital.test",
+                new NotificationSpec("queue", "Emergency queue backed up",
+                        "7 patients waiting — longest wait 34 m.", "/d/live-queue", false),
+                new NotificationSpec("summary", "Daily summary is ready",
+                        "42 appointments booked · 12 completed · 2 no-shows.", "/d/appointments", true));
+        seedForStaff("owusu@pulsehealth.test",
+                new NotificationSpec("appointment", "New appointment: Kwame Mensah",
+                        "Cardiology · tomorrow 10:00", "/w/appointments", false),
+                new NotificationSpec("no_show", "Kofi Antwi missed appointment",
+                        "APT-1046 · Cardiology · 09:45", "/w/appointments", false),
+                new NotificationSpec("system", "Shift schedule published",
+                        "Your next shift starts Monday 08:00.", "/w/appointments", true));
+    }
+
+    private void seedForStaff(String email, NotificationSpec... specs) {
+        StaffMember staff = staffMemberRepository.findByEmail(email).orElse(null);
+        if (staff == null) return;
+        if (notificationRepository.countByStaffId(staff.getId()) > 0) return;
+        for (NotificationSpec spec : specs) {
+            Notification n = new Notification(staff.getId(), staff.getFacilityId(),
+                    spec.type, spec.title, spec.body, spec.link);
+            n.setRead(spec.read);
+            notificationRepository.save(n);
+        }
+        log.info("✅ Demo notifications seeded for {}", email);
+    }
+
+    private record NotificationSpec(String type, String title, String body,
+                                    String link, boolean read) {
     }
 
     /**
