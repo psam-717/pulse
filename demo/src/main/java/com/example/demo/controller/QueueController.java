@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CallNextRequest;
+import com.example.demo.dto.CreateWalkInRequest;
 import com.example.demo.dto.QueueCancelResponse;
 import com.example.demo.dto.QueueDepartmentResponse;
 import com.example.demo.dto.QueueEntryResponse;
@@ -70,6 +71,17 @@ public class QueueController {
             @RequestParam(required = false) String departmentId) {
         Long facilityId = SecurityUtils.requireFacilityId();
         return ResponseEntity.ok(queueService.entries(facilityId, departmentId));
+    }
+
+    @PostMapping("/entries")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR','NURSE','FRONT_DESK')")
+    public ResponseEntity<QueueEntryResponse> createWalkIn(
+            @Valid @RequestBody CreateWalkInRequest request) {
+        return ResponseEntity.ok(queueService.createWalkIn(
+                SecurityUtils.requireFacilityId(),
+                request.patientId(),
+                request.departmentId(),
+                request.priority()));
     }
 
     @PostMapping("/call-next")
