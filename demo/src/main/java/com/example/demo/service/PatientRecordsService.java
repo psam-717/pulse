@@ -12,9 +12,11 @@ import com.example.demo.repository.LabResultRecordRepository;
 import com.example.demo.repository.PrescriptionRecordRepository;
 import com.example.demo.repository.VisitRecordRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,6 +61,48 @@ public class PatientRecordsService {
                 v.getVisitDate().toString(),
                 v.getDoctor(),
                 v.getSummary());
+    }
+
+    // ===================== staff authoring (Phase 6) =====================
+
+    /**
+     * Staff (facility web) records a consultation note. Context strings
+     * (department/hospital/doctor) are resolved by the controller from the
+     * authenticated session — the author's identity is a display snapshot,
+     * correct for medical history (renames must not rewrite old records).
+     */
+    @Transactional
+    public Visit addVisit(Long patientId, String department, String hospital,
+                          LocalDate visitDate, String doctor, String summary) {
+        VisitRecord record = new VisitRecord();
+        record.setPatientId(patientId);
+        record.setPublicId(newPublicId("VR"));
+        record.setDepartment(department);
+        record.setHospital(hospital);
+        record.setVisitDate(visitDate != null ? visitDate : LocalDate.now());
+        record.setDoctor(doctor);
+        record.setSummary(summary);
+        return toVisit(visitRecordRepository.save(record));
+    }
+
+    /** Staff (facility web) records a prescription. */
+    @Transactional
+    public Prescription addPrescription(Long patientId, String medication, String dose,
+                                        LocalDate prescribedDate, String doctor, String hospital) {
+        PrescriptionRecord record = new PrescriptionRecord();
+        record.setPatientId(patientId);
+        record.setPublicId(newPublicId("RX"));
+        record.setMedication(medication);
+        record.setDose(dose);
+        record.setPrescribedDate(prescribedDate != null ? prescribedDate : LocalDate.now());
+        record.setPrescribingDoctor(doctor);
+        record.setHospital(hospital);
+        return toRx(prescriptionRecordRepository.save(record));
+    }
+
+    private static String newPublicId(String prefix) {
+        return prefix + "-" + java.util.UUID.randomUUID().toString()
+                .substring(0, 8).toUpperCase(java.util.Locale.ROOT);
     }
 
     private LabResult toLab(LabResultRecord r) {
