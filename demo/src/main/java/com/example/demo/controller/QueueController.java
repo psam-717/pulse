@@ -67,9 +67,9 @@ public class QueueController {
     @GetMapping("/entries")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR','NURSE','FRONT_DESK','READ_ONLY')")
     public ResponseEntity<List<QueueEntryResponse>> entries(
-            @RequestParam String departmentId) {
-        SecurityUtils.requireFacilityId();
-        return ResponseEntity.ok(queueService.entries(departmentId));
+            @RequestParam(required = false) String departmentId) {
+        Long facilityId = SecurityUtils.requireFacilityId();
+        return ResponseEntity.ok(queueService.entries(facilityId, departmentId));
     }
 
     @PostMapping("/call-next")
