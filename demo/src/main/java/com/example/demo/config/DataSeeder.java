@@ -954,6 +954,144 @@ public class DataSeeder implements CommandLineRunner {
         }
         log.info("✅ Demo patients ({}) + queue entries ({}) ensured",
                 patientRepository.count(), queueEntryRepository.count());
+
+        ensureDoctorWorkspaceDemo(facility);
+    }
+
+    /**
+     * Doctor-workspace demo: keeps the facility's demo doctor (owusu) looking
+     * alive for the web /w screens regardless of what manual QA consumed.
+     *
+     * The web filters appointments by doctorName === session.name and the
+     * Now-Serving card by clinician === session.name, so this:
+     *  1. syncs the legacy Doctor row's full name to the StaffMember's
+     *     current name (they drift apart after profile edits), which also
+     *     retro-fixes existing bookings since doctorName is derived live;
+     *  2. ensures a realistic day of appointments for that doctor with a
+     *     spread of statuses;
+     *  3. tops up the department queue with active tickets whose clinician
+     *     is the doctor, so the board + Now Serving + My Patients render.
+     */
+    private void ensureDoctorWorkspaceDemo(Hospital facility) {
+        StaffMember staff = staffMemberRepository.findAll().stream()
+                .filter(s -> "owusu@pulsehealth.test".equals(s.getEmail()))
+                .filter(s -> s.getRole() == StaffRole.DOCTOR)
+                .findFirst().orElse(null);
+        if (staff == null) return;
+
+        Doctor legacy = doctorRepository.findAll().stream()
+                .filter(d -> "owusu@pulsehealth.test".equals(d.getEmail()))
+                .findFirst().orElse(null);
+        if (legacy == null) return;
+
+        // 1. Sync legacy doctor full name to the staff member's current name.
+        String staffName = staff.getName();
+        String[] parts = staffName.split(" ", 2);
+        String firstName = parts[0];
+        String lastName = parts.length > 1 ? parts[1] : "";
+        if (!firstName.equals(legacy.getFirstName()) || !lastName.equals(legacy.getLastName())) {
+            legacy.setFirstName(firstName);
+            legacy.setLastName(lastName);
+            doctorRepository.save(legacy);
+            log.info("🔄 Synced legacy doctor name to '{}'", staffName);
+        }
+
+        // Resolve department through the repo (lazy proxies die outside tx).
+        String deptId = staff.getDepartmentId();
+        Department dept = deptId != null && !deptId.isBlank()
+                ? departmentRepository.findById(Long.valueOf(deptId)).orElse(null)
+                : null;
+        if (dept == null) return;
+        Long facilityId = facility.getId();
+        if (!java.util.Objects.equals(dept.getFacilityId(), facilityId)) return;
+
+        // 2. Appointments today for this doctor across the demo patients.
+        String[] phones = {
+                "+233 24 111 0001", "+233 24 111 0002", "+233 24 111 0003",
+                "+233 24 111 0004", "+233 24 111 0005", "+233 24 111 0006",
+                "+233 24 111 0007", "+233 24 111 0008",
+        };
+        String[][] apptPlan = {
+                {"09:00", "completed"}, {"09:40", "completed"}, {"10:20", "confirmed"},
+                {"11:00", "confirmed"}, {"11:40", "checked_in"}, {"12:20", "no_show"},
+                {"13:00", "scheduled"}, {"13:40", "scheduled"},
+        };
+        java.time.LocalDate today = java.time.LocalDate.now();
+        for (int i = 0; i < apptPlan.length; i++) {
+            Patient patient = patientRepository.findByPhone(phones[i % phones.length])
+                    .orElse(null);
+            if (patient == null) continue;
+            java.time.LocalTime start = java.time.LocalTime.parse(apptPlan[i][0]);
+            TimeSlot slot = ensureSlot(legacy, today, start);
+            if (slot == null) continue;
+            if (bookingRepository.existsByPatientIdAndTimeSlotId(patient.getId(), slot.getId())) continue;
+            Booking booking = new Booking(patient, legacy, dept, facility,
+                    slot, dept.getConsultationFee());
+            booking.setStatus(BookingStatus.CONFIRMED);
+            booking.setPaymentStatus(PaymentStatus.PAID);
+            booking.setAppointmentStatus(apptPlan[i][1]);
+            bookingRepository.save(booking);
+        }
+
+        // 3. Top up an ACTIVE queue for the doctor's department.
+        String prefix = dept.getAbbreviation() != null && !dept.getAbbreviation().isBlank()
+                ? dept.getAbbreviation().substring(0, 1).toUpperCase(java.util.Locale.ROOT)
+                : "D";
+        long nextSeq = queueEntryRepository.maxTicketSequenceForPrefix(prefix) + 1;
+        String deptIdStr = String.valueOf(dept.getId());
+        List<QueueEntry> active = queueEntryRepository.findByDepartmentIdIn(List.of(deptIdStr))
+                .stream()
+                .filter(e -> e.getStatus() == QueueStatus.WAITING
+                        || e.getStatus() == QueueStatus.IN_CONSULTATION)
+                .toList();
+        long servingMe = active.stream()
+                .filter(e -> e.getStatus() == QueueStatus.IN_CONSULTATION)
+                .filter(e -> staffName.equals(e.getClinician()))
+                .count();
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        // One patient in consultation under this doctor if none exists.
+        if (servingMe == 0) {
+            Patient p = patientRepository.findByPhone(phones[0]).orElse(null);
+            if (p != null) {
+                QueueEntry e = new QueueEntry(
+                        prefix + "-" + String.format("%03d", nextSeq++),
+                        p.getFirstName() + " " + p.getLastName(), deptIdStr,
+                        QueuePriority.ROUTINE, PatientSource.APPOINTMENT,
+                        now.minusMinutes(6));
+                e.setStatus(QueueStatus.IN_CONSULTATION);
+                e.setCalledAt(now.minusMinutes(2));
+                e.setClinician(staffName);
+                e.setRoom("Room 1");
+                queueEntryRepository.save(e);
+            }
+        }
+        // Keep ~5 waiting so the board looks alive.
+        long waiting = active.stream()
+                .filter(e -> e.getStatus() == QueueStatus.WAITING)
+                .count();
+        String[][] waitingPlan = {
+                {"+233 24 111 0002", "URGENT", "28", "WALK_IN"},
+                {"+233 24 111 0003", "ROUTINE", "21", "APPOINTMENT"},
+                {"+233 24 111 0004", "ROUTINE", "14", "WALK_IN"},
+                {"+233 24 111 0005", "EMERGENCY", "9", "WALK_IN"},
+                {"+233 24 111 0006", "ROUTINE", "4", "APPOINTMENT"},
+        };
+        for (int i = 0; i < waitingPlan.length && waiting < 5; i++) {
+            String[] row = waitingPlan[i];
+            Patient p = patientRepository.findByPhone(row[0]).orElse(null);
+            if (p == null) continue;
+            String ticket = prefix + "-" + String.format("%03d", nextSeq++);
+            if (queueEntryRepository.countByTicketNumber(ticket) > 0) continue;
+            QueueEntry e = new QueueEntry(
+                    ticket, p.getFirstName() + " " + p.getLastName(), deptIdStr,
+                    QueuePriority.valueOf(row[1]), PatientSource.valueOf(row[3]),
+                    now.minusMinutes(Long.parseLong(row[2])));
+            e.setStatus(QueueStatus.WAITING);
+            queueEntryRepository.save(e);
+            waiting++;
+        }
+        log.info("✅ Doctor workspace demo ensured for {}", staffName);
     }
 
     /**
