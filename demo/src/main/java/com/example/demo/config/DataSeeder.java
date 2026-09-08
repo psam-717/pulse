@@ -429,6 +429,7 @@ public class DataSeeder implements CommandLineRunner {
         ensureFacilitySettings(facility);
 
         ensureDemoBookings();
+        refreshStaleDemoQueueTimestamps();
     }
 
     /**
@@ -953,6 +954,50 @@ public class DataSeeder implements CommandLineRunner {
         }
         log.info("✅ Demo patients ({}) + queue entries ({}) ensured",
                 patientRepository.count(), queueEntryRepository.count());
+    }
+
+    /**
+     * Demo hygiene: Render's Postgres persists across deploys, so queue
+     * entries seeded once with "minutes ago" timestamps silently age into
+     * days-old waits (dashboard showed 13,000+ minute waits). On every boot,
+     * re-stamp ACTIVE demo-facility entries whose check-in is older than 2h,
+     * preserving relative order (oldest keeps the longest wait).
+     */
+    private void refreshStaleDemoQueueTimestamps() {
+        Hospital facility = hospitalRepository.findAll().stream().findFirst().orElse(null);
+        if (facility == null) return;
+        List<String> deptIds = departmentRepository.findByFacilityId(facility.getId()).stream()
+                .map(d -> String.valueOf(d.getId()))
+                .toList();
+        if (deptIds.isEmpty()) return;
+
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusHours(2);
+        List<QueueEntry> stale = queueEntryRepository.findByDepartmentIdIn(deptIds).stream()
+                .filter(e -> e.getStatus() == QueueStatus.WAITING
+                        || e.getStatus() == QueueStatus.IN_CONSULTATION)
+                .filter(e -> e.getCheckInAt() == null || e.getCheckInAt().isBefore(cutoff))
+                .sorted(java.util.Comparator.comparing(QueueEntry::getCheckInAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .toList();
+        if (stale.isEmpty()) return;
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        for (int i = 0; i < stale.size(); i++) {
+            QueueEntry e = stale.get(i);
+            java.time.LocalDateTime newCheckIn =
+                    now.minusMinutes((stale.size() - 1 - i) * 3L + 3L);
+            java.time.Duration original = e.getCalledAt() != null && e.getCheckInAt() != null
+                    ? java.time.Duration.between(e.getCheckInAt(), e.getCalledAt())
+                    : java.time.Duration.ZERO;
+            e.setCheckInAt(newCheckIn);
+            if (e.getCalledAt() != null) {
+                e.setCalledAt(original.isNegative() || original.isZero()
+                        ? newCheckIn.plusMinutes(5)
+                        : newCheckIn.plus(original));
+            }
+        }
+        queueEntryRepository.saveAll(stale);
+        log.info("🔄 Refreshed {} stale demo queue check-in timestamps", stale.size());
     }
 
     /**
