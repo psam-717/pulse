@@ -17,6 +17,7 @@ import com.example.demo.model.PaymentTxnStatus;
 import com.example.demo.payment.AzaAmountConverter;
 import com.example.demo.payment.CheckoutSession;
 import com.example.demo.payment.PaymentGateway;
+import com.example.demo.util.GhanaPhoneValidator;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.PaymentHistoryRepository;
 import com.example.demo.repository.PaymentMethodRepository;
@@ -85,20 +86,44 @@ public class PaymentService {
             throw new IllegalArgumentException(
                     "network must be one of: mtn_momo, telecel_cash, card.");
         }
-        String last4 = sanitizeLast4(req.last4());
+
+        // Mobile money identifies the wallet by its full 10-digit number (the
+        // patient's own phone number — displayed in full, not a secret PAN).
+        // Cards keep the old last-4 display-aid contract.
+        String accountNumber = null;
+        String last4;
+        if (network == PaymentNetwork.card) {
+            last4 = sanitizeLast4(req.last4());
+        } else {
+            accountNumber = GhanaPhoneValidator.requireValid(req.accountNumber(), "accountNumber");
+            last4 = last4Digits(accountNumber);
+        }
         String label = req.label() == null || req.label().isBlank()
-                ? NETWORK_LABEL.get(network) + " •••• " + last4
+                ? defaultLabel(network, accountNumber, last4)
                 : req.label().trim();
 
         PaymentMethod m = new PaymentMethod();
         m.setPatientId(patientId);
         m.setNetwork(network);
         m.setLast4(last4);
+        m.setAccountNumber(accountNumber);
         m.setLabel(label);
         m.setGatewayToken(null);
         boolean first = methodRepository.countByPatientId(patientId) == 0;
         m.setDefault(first);
         return toMethod(methodRepository.save(m));
+    }
+
+    private static String defaultLabel(PaymentNetwork network, String accountNumber, String last4) {
+        if (network == PaymentNetwork.card) {
+            return NETWORK_LABEL.get(network) + " •••• " + last4;
+        }
+        return NETWORK_LABEL.get(network) + " " + accountNumber;
+    }
+
+    private static String last4Digits(String accountNumber) {
+        String digits = accountNumber.replaceAll("\\D", "");
+        return digits.substring(Math.max(0, digits.length() - 4));
     }
 
     @Transactional
@@ -256,7 +281,7 @@ public class PaymentService {
         String digits = raw.trim().replaceAll("\\D", "");
         if (digits.length() < 2 || digits.length() > 4) {
             throw new IllegalArgumentException(
-                    "last4 must be 2–4 digits. Do not send a full card or MoMo number.");
+                    "last4 must be 2–4 digits. Do not send a full card number.");
         }
         return digits;
     }
@@ -268,6 +293,7 @@ public class PaymentService {
                 m.getLabel(),
                 m.getLast4(),
                 m.getGatewayToken(),
-                m.isDefault());
+                m.isDefault(),
+                m.getAccountNumber());
     }
 }
