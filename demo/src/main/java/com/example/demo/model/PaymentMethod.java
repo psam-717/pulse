@@ -3,9 +3,13 @@ package com.example.demo.model;
 import jakarta.persistence.*;
 
 /**
- * Patient-saved payment display metadata (ARCHITECTURE.md §8 P4).
- * Never stores a raw card/MoMo number, PIN, or CVV. Aza has no
- * stored-instrument API — this row only labels the Payments screen.
+ * Patient-saved payment method (ARCHITECTURE.md §8 P4).
+ *
+ * <p>Mobile-money wallets store {@code accountNumber} — the wallet phone
+ * number the patient entered (a phone number, not a secret; shown in full).
+ * Cards never store a PAN/PIN/CVV — only {@code last4} as a display aid.
+ * Aza hosted checkout owns the charging rails; this row labels the method
+ * and (for wallets) identifies where the patient pays from.
  */
 @Entity
 @Table(name = "patient_payment_methods")
@@ -28,6 +32,10 @@ public class PaymentMethod {
     @Column(nullable = false, length = 4)
     private String last4;
 
+    /** Full mobile-money wallet number (0XXXXXXXXX / +233XXXXXXXXX); null for cards. */
+    @Column(length = 20)
+    private String accountNumber;
+
     /** Unused for charging. Kept so the mobile PaymentMethod shape is intact. */
     private String gatewayToken;
 
@@ -49,6 +57,9 @@ public class PaymentMethod {
 
     public String getLast4() { return last4; }
     public void setLast4(String last4) { this.last4 = last4; }
+
+    public String getAccountNumber() { return accountNumber; }
+    public void setAccountNumber(String accountNumber) { this.accountNumber = accountNumber; }
 
     public String getGatewayToken() { return gatewayToken; }
     public void setGatewayToken(String gatewayToken) { this.gatewayToken = gatewayToken; }
