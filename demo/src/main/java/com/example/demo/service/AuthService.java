@@ -112,6 +112,11 @@ public class AuthService {
         patient.setPhone(pending.getPhone());
         patient.setGhanaCard(pending.getGhanaCard());
         patient.setPassword(pending.getHashedPassword());
+        // Every patient gets a number at creation — the profile DTO exposes
+        // patientNumber as the public id, and login accepts it as identifier.
+        // (Previously only the staff create path assigned one; self-signups
+        // were left with a null number.)
+        patient.setPatientNumber(PatientService.nextPatientNumber(patientRepository));
         patientRepository.save(patient);
 
         // Clean up the pending registration
