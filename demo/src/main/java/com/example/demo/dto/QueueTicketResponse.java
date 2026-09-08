@@ -12,5 +12,10 @@ public record QueueTicketResponse(
         int userNumber,
         int waitTimeMins,
         String roomNumber,
-        String estimatedTime
+        String estimatedTime,
+        Long bookingId,          // null for walk-ins / name-matched entries
+        String bookingReference, // e.g. APT-0049 — null when no booking
+        int queueTotal,          // people still in line in this department (WAITING + IN_CONSULTATION, incl. patient)
+        int aheadCount,          // active people before the patient in the same department
+        int servedCount          // people checked in before the patient who already completed/no-showed/skipped
 ) {}
