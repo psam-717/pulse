@@ -14,6 +14,7 @@ public record QueueEntryResponse(
         String checkInAt,
         String calledAt,
         String clinician,
+        String clinicianId,
         String room
 ) {
     public static QueueEntryResponse from(QueueEntry e) {
@@ -28,6 +29,7 @@ public record QueueEntryResponse(
                 String.valueOf(e.getCheckInAt()),
                 e.getCalledAt() != null ? String.valueOf(e.getCalledAt()) : null,
                 e.getClinician(),
+                e.getClinicianId() != null ? String.valueOf(e.getClinicianId()) : null,
                 e.getRoom());
     }
 }

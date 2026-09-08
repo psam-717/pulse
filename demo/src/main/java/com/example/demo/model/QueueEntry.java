@@ -48,6 +48,11 @@ public class QueueEntry {
 
     private String clinician;
 
+    /** Staff id of the clinician who called/serves this ticket — the stable
+     *  join key. The display name is only a snapshot and can change on
+     *  profile edits, so consumers must match on this id, never the name. */
+    private Long clinicianId;
+
     private String room;
 
     /** Patient linkage for mobile GET /queue/me (walk-ins may stay null). */
@@ -99,6 +104,9 @@ public class QueueEntry {
 
     public String getClinician() { return clinician; }
     public void setClinician(String clinician) { this.clinician = clinician; }
+
+    public Long getClinicianId() { return clinicianId; }
+    public void setClinicianId(Long clinicianId) { this.clinicianId = clinicianId; }
 
     public String getRoom() { return room; }
     public void setRoom(String room) { this.room = room; }
