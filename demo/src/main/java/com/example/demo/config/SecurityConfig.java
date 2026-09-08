@@ -35,6 +35,10 @@ public class SecurityConfig {
         this.objectMapper = objectMapper;
     }
 
+    @org.springframework.beans.factory.annotation.Value(
+            "${cors.allowed-origins:http://localhost:3000,http://localhost:8081,http://127.0.0.1:8081}")
+    private String allowedOriginsCsv;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -89,10 +93,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource(
-            @org.springframework.beans.factory.annotation.Value(
-                    "${cors.allowed-origins:http://localhost:3000,http://localhost:8081,http://127.0.0.1:8081}")
-            String allowedOriginsCsv) {
+    public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
         org.springframework.web.cors.CorsConfiguration config = new org.springframework.web.cors.CorsConfiguration();
         config.setAllowedOrigins(java.util.Arrays.stream(allowedOriginsCsv.split(","))
                 .map(String::trim)
