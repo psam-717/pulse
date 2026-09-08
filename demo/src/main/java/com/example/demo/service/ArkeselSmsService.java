@@ -42,22 +42,24 @@ public class ArkeselSmsService {
     private final String apiKey;
     private final String sender;
     private final boolean sandbox;
-    private final boolean otpDevMode;
+    private final boolean sendReal;
 
     public ArkeselSmsService(
             @Value("${arkesel.api-key:}") String apiKey,
             @Value("${arkesel.sender:}") String sender,
             @Value("${arkesel.sandbox:false}") boolean sandbox,
-            @Value("${otp.dev-mode:true}") boolean otpDevMode) {
+            @Value("${arkesel.send-real:false}") boolean sendReal) {
         this.restClient = RestClient.builder().build();
         this.apiKey = apiKey;
         this.sender = sender;
         this.sandbox = sandbox;
-        this.otpDevMode = otpDevMode;
+        this.sendReal = sendReal;
     }
 
     private boolean realDeliveryEnabled() {
-        return !otpDevMode
+        // Independent of otp.dev-mode: dev mode stays ON so staff 2FA and
+        // patient flows keep their dev-echo (no staff SMS channel exists yet).
+        return sendReal
                 && apiKey != null && !apiKey.isBlank()
                 && sender != null && !sender.isBlank();
     }
