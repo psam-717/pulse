@@ -33,13 +33,16 @@ public class QueueService {
     private final QueueEntryRepository queueEntryRepository;
     private final DepartmentRepository departmentRepository;
     private final StaffMemberRepository staffMemberRepository;
+    private final NotificationService notificationService;
 
     public QueueService(QueueEntryRepository queueEntryRepository,
                         DepartmentRepository departmentRepository,
-                        StaffMemberRepository staffMemberRepository) {
+                        StaffMemberRepository staffMemberRepository,
+                        NotificationService notificationService) {
         this.queueEntryRepository = queueEntryRepository;
         this.departmentRepository = departmentRepository;
         this.staffMemberRepository = staffMemberRepository;
+        this.notificationService = notificationService;
     }
 
     /** Per-department summaries for the sidebar / dept tabs. */
@@ -112,6 +115,22 @@ public class QueueService {
             target.setClinicianId(staffId);
         }
         queueEntryRepository.save(target);
+        // Phase 3: front desk + admins of the department's facility get a
+        // "now serving" ping so they can update boards / catch no-shows.
+        try {
+            Department d = departmentRepository.findById(Long.valueOf(departmentId)).orElse(null);
+            if (d != null) {
+                notificationService.notifyQueueStaff(
+                        d.getFacilityId(), "queue",
+                        "Now serving " + target.getTicketNumber(),
+                        (target.getPatientName() != null ? target.getPatientName() + " · " : "")
+                                + d.getName()
+                                + (target.getClinician() != null ? " · " + target.getClinician() : ""),
+                        "/d/live-queue");
+            }
+        } catch (NumberFormatException ignored) {
+            // Unknown department id → skip the notification, never fail call-next.
+        }
         return QueueEntryResponse.from(target);
     }
 

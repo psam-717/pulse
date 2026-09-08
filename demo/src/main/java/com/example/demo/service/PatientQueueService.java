@@ -48,17 +48,20 @@ public class PatientQueueService {
     private final DepartmentRepository departmentRepository;
     private final PatientRepository patientRepository;
     private final OperationalSettingsRepository operationalSettingsRepository;
+    private final NotificationService notificationService;
 
     public PatientQueueService(QueueEntryRepository queueEntryRepository,
                                BookingRepository bookingRepository,
                                DepartmentRepository departmentRepository,
                                PatientRepository patientRepository,
-                               OperationalSettingsRepository operationalSettingsRepository) {
+                               OperationalSettingsRepository operationalSettingsRepository,
+                               NotificationService notificationService) {
         this.queueEntryRepository = queueEntryRepository;
         this.bookingRepository = bookingRepository;
         this.departmentRepository = departmentRepository;
         this.patientRepository = patientRepository;
         this.operationalSettingsRepository = operationalSettingsRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -101,6 +104,16 @@ public class PatientQueueService {
             entry.setBookingId(booking.getId());
             queueEntryRepository.save(entry);
         }
+        // Phase 3: ping the facility's front desk + admins that a patient is
+        // physically in the queue (from the booking's department).
+        Department dept = booking.getDepartment();
+        notificationService.notifyQueueStaff(
+                dept.getFacilityId(), "appointment",
+                "Patient checked in",
+                (entry.getPatientName() != null ? entry.getPatientName() : "Patient")
+                        + " · ticket " + entry.getTicketNumber()
+                        + (dept.getName() != null ? " · " + dept.getName() : ""),
+                "/d/live-queue");
         return toTicket(entry, patientId);
     }
 
