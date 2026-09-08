@@ -125,6 +125,7 @@ public class DataSeeder implements CommandLineRunner {
             ensureSuperAdminExists();
             seedTimeSlotsIfEmpty();
             ensureFacilityDemoData();
+            ensureKnustWebDoctor();
             ensureDemoMedicalProfiles();
             ensureDiscoveryDemoData();
             ensureDemoInsurance();
@@ -234,6 +235,7 @@ public class DataSeeder implements CommandLineRunner {
 
         // Facility-plane demo accounts + departments (web dashboard login)
         ensureFacilityDemoData();
+        ensureKnustWebDoctor();
         ensureDemoMedicalProfiles();
         ensureDiscoveryDemoData();
         ensureDemoInsurance();
@@ -1393,6 +1395,47 @@ public class DataSeeder implements CommandLineRunner {
         if (created > 0) {
             log.info("✅ Created {} legacy doctor rows for staff doctors", created);
         }
+    }
+
+    /**
+     * KNUST University Hospital web-login demo doctor (staff plane, facility
+     * 3). The legacy demo roster only fills the FIRST hospital, so a second
+     * facility would never get staff through that path (its discovery doctor
+     * above is legacy-row-only — bookable on mobile but has no dashboard
+     * login). This ensures a staff DOCTOR idempotently (by email) on every
+     * boot: login Password123! (dev only) plus a matching legacy Doctor row
+     * via ensureLegacyDoctorsForStaff so the department is bookable online
+     * and appointments land in the doctor's web workspace.
+     */
+    private void ensureKnustWebDoctor() {
+        Hospital knust = hospitalRepository.findAll().stream()
+                .filter(h -> h.getName() != null && h.getName().contains("KNUST"))
+                .findFirst()
+                .orElse(null);
+        if (knust == null) {
+            return;
+        }
+        String email = "kelvinquarcoo247@gmail.com";
+        if (staffMemberRepository.existsByEmail(email)) {
+            return;
+        }
+
+        Department dept = departmentRepository.findByAbbreviation("K-GOPD")
+                .filter(d -> knust.getId().equals(d.getFacilityId()))
+                .orElseGet(() -> departmentRepository.findByFacilityId(knust.getId()).stream()
+                        .findFirst().orElse(null));
+
+        staffMemberRepository.save(new StaffMember(
+                "Dr. Kelvin Quarcoo", StaffRole.DOCTOR, "General Practitioner",
+                "General Practice",
+                dept != null ? String.valueOf(dept.getId()) : "",
+                dept != null ? dept.getName() : "",
+                email, "+233 500 111 002",
+                "08:00", "17:00",
+                StaffDutyStatus.ON_DUTY, StaffAccountStatus.ACTIVE,
+                null, knust.getId(), passwordEncoder.encode("Password123!")));
+        ensureLegacyDoctorsForStaff(knust);
+        log.info("✅ KNUST web demo doctor ensured ({})", email);
     }
 
     private Patient ensurePatient(String firstName, String lastName, Gender gender,
