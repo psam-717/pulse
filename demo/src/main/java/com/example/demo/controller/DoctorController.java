@@ -1,6 +1,6 @@
 package com.example.demo.controller;
 
-import com.example.demo.model.Doctor;
+import com.example.demo.dto.DoctorAvailabilityResponse;
 import com.example.demo.service.BookingService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import org.springframework.data.domain.Page;
@@ -21,9 +21,9 @@ public class DoctorController {
 
     @SecurityRequirements()
     @GetMapping("/{departmentId}/doctors")
-    public ResponseEntity<Page<Doctor>> listDoctors(
+    public ResponseEntity<Page<DoctorAvailabilityResponse>> listDoctors(
             @PathVariable Long departmentId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(bookingService.listDoctors(departmentId, pageable));
+        return ResponseEntity.ok(bookingService.listDoctorsWithAvailability(departmentId, pageable));
     }
 }
