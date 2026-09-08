@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.dto.QueueDepartmentResponse;
 import com.example.demo.dto.QueueEntryResponse;
 import com.example.demo.exception.ConflictException;
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.Department;
 import com.example.demo.model.QueueEntry;
 import com.example.demo.model.QueuePriority;
@@ -49,9 +50,33 @@ public class QueueService {
                 .toList();
     }
 
-    /** Entries for one department, waiting first then by check-in time. */
-    public List<QueueEntryResponse> entries(String departmentId) {
-        return queueEntryRepository.findByDepartmentId(departmentId).stream()
+    /** Entries for one department, or the whole facility when departmentId is
+     *  omitted ("All" tab on the dashboard board). Department ids are always
+     *  validated against the caller's facility so staff can never read another
+     *  tenant's queue (BACKEND_SPEC §2.2). Waiting first, then by check-in time. */
+    public List<QueueEntryResponse> entries(Long facilityId, String departmentId) {
+        List<String> departmentIds;
+        if (departmentId == null || departmentId.isBlank()) {
+            departmentIds = departmentRepository.findByFacilityId(facilityId).stream()
+                    .map(d -> String.valueOf(d.getId()))
+                    .toList();
+            if (departmentIds.isEmpty()) {
+                return List.of();
+            }
+        } else {
+            Department department;
+            try {
+                department = departmentRepository.findById(Long.valueOf(departmentId))
+                        .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
+            } catch (NumberFormatException e) {
+                throw new ResourceNotFoundException("Department not found");
+            }
+            if (!java.util.Objects.equals(department.getFacilityId(), facilityId)) {
+                throw new ResourceNotFoundException("Department not found");
+            }
+            departmentIds = List.of(departmentId);
+        }
+        return queueEntryRepository.findByDepartmentIdIn(departmentIds).stream()
                 .sorted(Comparator
                         .comparing((QueueEntry e) -> e.getStatus() == QueueStatus.WAITING ? 0 : 1)
                         .thenComparing(QueueEntry::getCheckInAt))
