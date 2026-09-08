@@ -13,17 +13,20 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Patient's own bookings (mobile "Bookings" section: pending/approved/
- * cancelled + payment). Patient JWT only.
+ * Patient's own appointments with FACILITY-plane status (approved/cancelled
+ * via appointmentStatus) + payment — the mobile Bookings section source.
+ *
+ * Distinct from the legacy paged GET /patients/me/bookings (BookingController
+ * legacy statuses); both coexist.
  */
 @RestController
-@RequestMapping("/api/patients/me/bookings")
+@RequestMapping("/api/patients/me/appointments")
 @PreAuthorize("hasRole('PATIENT')")
-public class PatientBookingController {
+public class PatientAppointmentsController {
 
     private final AppointmentService appointmentService;
 
-    public PatientBookingController(AppointmentService appointmentService) {
+    public PatientAppointmentsController(AppointmentService appointmentService) {
         this.appointmentService = appointmentService;
     }
 
@@ -33,7 +36,7 @@ public class PatientBookingController {
     }
 
     @GetMapping
-    public ResponseEntity<List<PatientBookingResponse>> myBookings() {
+    public ResponseEntity<List<PatientBookingResponse>> myAppointments() {
         return ResponseEntity.ok(appointmentService.patientBookings(currentPatientId()));
     }
 }
