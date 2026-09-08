@@ -6,6 +6,7 @@ import com.example.demo.dto.AvailabilityResponse.SlotItem;
 import com.example.demo.dto.BookingRequest;
 import com.example.demo.dto.BookingResponse;
 import com.example.demo.dto.BookingSummaryResponse;
+import com.example.demo.dto.DoctorAvailabilityResponse;
 import com.example.demo.dto.MobileBookingRequest;
 import com.example.demo.dto.RescheduleRequest;
 import com.example.demo.exception.ConflictException;
@@ -23,6 +24,8 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class BookingService {
@@ -86,6 +89,33 @@ public class BookingService {
             throw new IllegalArgumentException("Department not found");
         }
         return doctorRepository.findByDepartmentId(departmentId, pageable);
+    }
+
+    /**
+     * Public doctor listing with the online-booking eligibility flag.
+     * {@code bookableOnline} is true only for doctors the mobile booking flow
+     * can actually resolve to (OnlineBookingSupport staff-link rule), so
+     * clients can hide departments whose doctors would 409 on booking.
+     */
+    public Page<DoctorAvailabilityResponse> listDoctorsWithAvailability(Long departmentId, Pageable pageable) {
+        Department department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new IllegalArgumentException("Department not found"));
+        Page<Doctor> doctors = doctorRepository.findByDepartmentId(departmentId, pageable);
+        Set<Long> linkedIds = OnlineBookingSupport.staffLinkedDoctors(
+                        doctors.getContent(), staffMemberRepository, department.getFacilityId())
+                .stream()
+                .map(Doctor::getId)
+                .collect(Collectors.toSet());
+        return doctors.map(d -> new DoctorAvailabilityResponse(
+                d.getId(),
+                d.getFirstName(),
+                d.getLastName(),
+                d.getSpecialization(),
+                d.getEmail(),
+                d.getPhone(),
+                departmentId,
+                d.getHospital() == null ? null : d.getHospital().getId(),
+                linkedIds.contains(d.getId())));
     }
 
     public List<Doctor> listDoctors(Long departmentId) {
