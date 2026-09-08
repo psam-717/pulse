@@ -2,7 +2,9 @@ package com.example.demo.repository;
 
 import com.example.demo.model.QueueEntry;
 import com.example.demo.model.QueueStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -55,4 +57,18 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     java.util.List<QueueEntry> findByPatientIdAndStatusIn(Long patientId, List<QueueStatus> statuses);
 
     java.util.Optional<QueueEntry> findByBookingId(Long bookingId);
+
+    /**
+     * Atomic call-next primitives (§7.3): read the target row WITH a
+     * pessimistic write lock so two concurrent call-next requests cannot
+     * both pick the same waiting patient. The locked find re-reads the
+     * latest committed state, so a second caller sees status already
+     * IN_CONSULTATION and gets the Conflict instead of double-assigning.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    java.util.Optional<QueueEntry> findByIdAndStatus(Long id, QueueStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    java.util.Optional<QueueEntry> findFirstByDepartmentIdAndStatusOrderByCheckInAtAsc(
+            String departmentId, QueueStatus status);
 }

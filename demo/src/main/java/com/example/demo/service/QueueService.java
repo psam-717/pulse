@@ -5,13 +5,18 @@ import com.example.demo.dto.QueueEntryResponse;
 import com.example.demo.exception.ConflictException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.model.Department;
+import com.example.demo.model.Patient;
+import com.example.demo.model.PatientSource;
 import com.example.demo.model.QueueEntry;
 import com.example.demo.model.QueuePriority;
 import com.example.demo.model.QueueStatus;
 import com.example.demo.model.StaffMember;
 import com.example.demo.repository.DepartmentRepository;
+import com.example.demo.repository.PatientRepository;
 import com.example.demo.repository.QueueEntryRepository;
 import com.example.demo.repository.StaffMemberRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,18 +35,23 @@ import java.util.stream.Collectors;
 @Service
 public class QueueService {
 
+    private static final Logger log = LoggerFactory.getLogger(QueueService.class);
+
     private final QueueEntryRepository queueEntryRepository;
     private final DepartmentRepository departmentRepository;
     private final StaffMemberRepository staffMemberRepository;
+    private final PatientRepository patientRepository;
     private final NotificationService notificationService;
 
     public QueueService(QueueEntryRepository queueEntryRepository,
                         DepartmentRepository departmentRepository,
                         StaffMemberRepository staffMemberRepository,
+                        PatientRepository patientRepository,
                         NotificationService notificationService) {
         this.queueEntryRepository = queueEntryRepository;
         this.departmentRepository = departmentRepository;
         this.staffMemberRepository = staffMemberRepository;
+        this.patientRepository = patientRepository;
         this.notificationService = notificationService;
     }
 
@@ -90,19 +100,20 @@ public class QueueService {
     /** Move the next (or a specific) waiting entry into consultation. */
     @Transactional
     public QueueEntryResponse callNext(String departmentId, String entryId, Long staffId) {
-        List<QueueEntry> waiting = queueEntryRepository
-                .findByDepartmentIdAndStatus(departmentId, QueueStatus.WAITING).stream()
-                .sorted(Comparator.comparing(QueueEntry::getCheckInAt))
-                .toList();
-        if (waiting.isEmpty()) {
-            throw new ConflictException("No patients waiting in this queue.");
+        // Atomic pick (§7.3): the repository locks the candidate row with
+        // PESSIMISTIC_WRITE, so two concurrent call-next requests cannot both
+        // claim the same waiting patient — the loser's locked re-read sees
+        // status already IN_CONSULTATION and falls through to the Conflict.
+        QueueEntry target;
+        if (entryId != null && !entryId.isBlank()) {
+            target = queueEntryRepository.findByIdAndStatus(Long.valueOf(entryId), QueueStatus.WAITING)
+                    .orElseThrow(() -> new ConflictException(
+                            "That ticket is no longer waiting in this queue."));
+        } else {
+            target = queueEntryRepository
+                    .findFirstByDepartmentIdAndStatusOrderByCheckInAtAsc(departmentId, QueueStatus.WAITING)
+                    .orElseThrow(() -> new ConflictException("No patients waiting in this queue."));
         }
-        QueueEntry target = entryId != null
-                ? waiting.stream().filter(e -> e.getId().toString().equals(entryId))
-                        .findFirst()
-                        .orElseThrow(() -> new ConflictException(
-                                "That ticket is no longer waiting in this queue."))
-                : waiting.get(0);
 
         target.setStatus(QueueStatus.IN_CONSULTATION);
         target.setCalledAt(LocalDateTime.now());
@@ -132,6 +143,50 @@ public class QueueService {
             // Unknown department id → skip the notification, never fail call-next.
         }
         return QueueEntryResponse.from(target);
+    }
+
+    /** Front-desk walk-in registration (§10.1): existing patient → WAITING entry. */
+    @Transactional
+    public QueueEntryResponse createWalkIn(Long facilityId, Long patientId,
+                                           String departmentId, String priorityRaw) {
+        Department department;
+        try {
+            department = departmentRepository.findById(Long.valueOf(departmentId))
+                    .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
+        } catch (NumberFormatException e) {
+            throw new ResourceNotFoundException("Department not found");
+        }
+        if (!java.util.Objects.equals(department.getFacilityId(), facilityId)) {
+            throw new ResourceNotFoundException("Department not found");
+        }
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new IllegalArgumentException("Patient not found"));
+        if (!queueEntryRepository.findByPatientIdAndStatusIn(patient.getId(),
+                List.of(QueueStatus.WAITING, QueueStatus.IN_CONSULTATION)).isEmpty()) {
+            throw new ConflictException("Patient already has an active queue ticket");
+        }
+
+        QueuePriority priority = QueuePriority.ROUTINE;
+        if (priorityRaw != null && !priorityRaw.isBlank()) {
+            try {
+                priority = QueuePriority.valueOf(priorityRaw.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("priority must be routine, urgent or emergency");
+            }
+        }
+
+        String code = department.getAbbreviation();
+        String prefix = (code != null && !code.isBlank())
+                ? code.substring(0, 1).toUpperCase(java.util.Locale.ROOT) : "D";
+        long nextSeq = queueEntryRepository.maxTicketSequenceForPrefix(prefix) + 1;
+        String ticket = prefix + "-" + String.format("%03d", nextSeq);
+        String name = (patient.getFirstName() + " " + patient.getLastName()).trim();
+        QueueEntry entry = new QueueEntry(ticket, name, departmentId, priority,
+                PatientSource.WALK_IN, LocalDateTime.now());
+        entry.setPatientId(patient.getId());
+        queueEntryRepository.save(entry);
+        log.info("Walk-in registered: {} -> {} ({})", name, ticket, department.getName());
+        return QueueEntryResponse.from(entry);
     }
 
     /** Simple status transition for queue entries (waiting → active/completed). */
