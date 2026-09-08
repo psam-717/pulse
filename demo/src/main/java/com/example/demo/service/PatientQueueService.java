@@ -104,9 +104,7 @@ public class PatientQueueService {
             entry = buildQueueEntry(booking);
             queueEntryRepository.save(entry);
         } else {
-            entry.setPatientId(patientId);
-            entry.setBookingId(booking.getId());
-            queueEntryRepository.save(entry);
+            reactivateQueueEntry(entry, patientId, booking);
         }
         // Phase 3: ping the facility's front desk + admins that a patient is
         // physically in the queue (from the booking's department).
@@ -150,6 +148,27 @@ public class PatientQueueService {
             });
         }
         return new QueueCancelResponse("Queue ticket cancelled", ticketNumber);
+    }
+
+    /**
+     * Re-check-in reuses the booking's existing queue row rather than creating a
+     * second one (findByBookingId is a one-row-per-booking lookup). That row is
+     * this patient's own CANCELLED ticket: cancelMyTicket releases the booking
+     * (checkedIn=false) but keeps the row, so re-check-in finds it here. Without
+     * a state reset the patient would get a 200 ticket whose row is still
+     * CANCELLED, then every GET /queue/me 404s ("appears once, then 404s").
+     * Reactivation puts the patient back at the END of the line (fresh
+     * checkInAt) and clears any serving artifacts from a prior call.
+     */
+    private void reactivateQueueEntry(QueueEntry entry, Long patientId, Booking booking) {
+        entry.setPatientId(patientId);
+        entry.setBookingId(booking.getId());
+        entry.setStatus(QueueStatus.WAITING);
+        entry.setCheckInAt(LocalDateTime.now());
+        entry.setCalledAt(null);
+        entry.setClinician(null);
+        entry.setClinicianId(null);
+        queueEntryRepository.save(entry);
     }
 
     private QueueEntry findActiveEntry(Long patientId) {
