@@ -50,15 +50,29 @@ public class JwtUtil {
      * so facility and platform tokens can be told apart (§2.4).
      */
     public String generateStaffToken(Long staffId, Long facilityId, String role) {
-        return Jwts.builder()
+        return generateStaffToken(staffId, facilityId, role, null);
+    }
+
+    /** Staff token carrying a session id claim ("sid") for session management. */
+    public String generateStaffToken(Long staffId, Long facilityId, String role,
+                                     String sessionId) {
+        var builder = Jwts.builder()
                 .subject(staffId.toString())
                 .claim("role", role)
                 .claim("facilityId", facilityId)
-                .claim("aud", "pulse-facility")
+                .claim("aud", "pulse-facility");
+        if (sessionId != null) {
+            builder.claim("sid", sessionId);
+        }
+        return builder
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(secretKey)
                 .compact();
+    }
+
+    public String getSessionId(String token) {
+        return parseToken(token).get("sid", String.class);
     }
 
     public Long getFacilityId(String token) {

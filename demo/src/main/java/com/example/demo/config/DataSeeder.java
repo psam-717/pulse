@@ -761,6 +761,8 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS email_on_no_show boolean DEFAULT true");
         jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS sms_on_queue_alert boolean DEFAULT false");
         jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS daily_summary_email boolean DEFAULT true");
+        // Phase 4: personal 2FA toggle (AccountSettingsService /settings/2fa).
+        jdbcTemplate.execute("ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS two_factor_enabled boolean DEFAULT false");
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS region varchar(255)");
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS facility_type varchar(255) DEFAULT 'hospital'");
         jdbcTemplate.execute("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS logo_url varchar(255)");

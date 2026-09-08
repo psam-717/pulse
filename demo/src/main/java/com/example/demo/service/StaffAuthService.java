@@ -39,6 +39,7 @@ public class StaffAuthService {
     private final StaffMemberRepository staffRepository;
     private final LoginOtpRepository loginOtpRepository;
     private final JwtUtil jwtUtil;
+    private final AccountSettingsService accountSettingsService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -49,12 +50,14 @@ public class StaffAuthService {
     public StaffAuthService(StaffMemberRepository staffRepository,
                             LoginOtpRepository loginOtpRepository,
                             JwtUtil jwtUtil,
+                            AccountSettingsService accountSettingsService,
                             @Value("${otp.expiry-minutes:5}") int otpExpiryMinutes,
                             @Value("${otp.max-attempts:5}") int otpMaxAttempts,
                             @Value("${otp.dev-mode:true}") boolean otpDevMode) {
         this.staffRepository = staffRepository;
         this.loginOtpRepository = loginOtpRepository;
         this.jwtUtil = jwtUtil;
+        this.accountSettingsService = accountSettingsService;
         this.otpExpiryMinutes = otpExpiryMinutes;
         this.otpMaxAttempts = otpMaxAttempts;
         this.otpDevMode = otpDevMode;
@@ -89,7 +92,7 @@ public class StaffAuthService {
      * when this method throws (a rollback would undo the increment and the
      * lockout could never trigger). Each repository save commits on its own.
      */
-    public LoginResponse verifyLoginOtp(VerifyLoginOtpRequest request) {
+    public LoginResponse verifyLoginOtp(VerifyLoginOtpRequest request, String userAgent) {
         String email = request.email().trim().toLowerCase();
         LoginOtp otp = loginOtpRepository.findFirstByEmailOrderByCreatedAtDesc(email)
                 .filter(o -> !o.isUsed())
@@ -119,8 +122,9 @@ public class StaffAuthService {
 
         StaffMember staff = staffRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Staff member not found"));
+        String sid = accountSettingsService.registerSession(staff.getId(), userAgent);
         String token = jwtUtil.generateStaffToken(
-                staff.getId(), staff.getFacilityId(), staff.getRole().name());
+                staff.getId(), staff.getFacilityId(), staff.getRole().name(), sid);
         WorkspaceSessionResponse session = WorkspaceSessionResponse.from(staff);
         return new LoginResponse(token, session.role(), staff.getId(),
                 "Login successful", session, null);

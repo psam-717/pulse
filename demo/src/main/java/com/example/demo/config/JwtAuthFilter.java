@@ -10,6 +10,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.example.demo.repository.StaffSessionRepository;
+
 import java.io.IOException;
 import java.util.Collections;
 
@@ -17,9 +19,11 @@ import java.util.Collections;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final StaffSessionRepository staffSessionRepository;
 
-    public JwtAuthFilter(JwtUtil jwtUtil) {
+    public JwtAuthFilter(JwtUtil jwtUtil, StaffSessionRepository staffSessionRepository) {
         this.jwtUtil = jwtUtil;
+        this.staffSessionRepository = staffSessionRepository;
     }
 
     @Override
@@ -36,6 +40,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Claims claims = jwtUtil.parseToken(token);
                 Long userId = Long.parseLong(claims.getSubject());
                 String role = claims.get("role", String.class);
+
+                // Facility staff tokens carry a session id ("sid"); a token
+                // whose session row has been deleted (signed out remotely) is
+                // rejected here — that is what makes /settings/sessions
+                // revocations real.
+                String sid = claims.get("sid", String.class);
+                if (sid != null && !staffSessionRepository.existsById(sid)) {
+                    throw new SecurityException("Session revoked");
+                }
 
                 // Facility-plane staff tokens carry a facilityId claim; the
                 // filter stores it as the Authentication credentials so

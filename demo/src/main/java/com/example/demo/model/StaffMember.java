@@ -76,6 +76,9 @@ public class StaffMember {
     private boolean smsOnQueueAlert = false;
     private boolean dailySummaryEmail = true;
 
+    @Column(name = "two_factor_enabled", nullable = false)
+    private boolean twoFactorEnabled = false;
+
     public StaffMember() {}
 
     public StaffMember(String name, StaffRole role, String title, String specialty,
@@ -161,4 +164,7 @@ public class StaffMember {
 
     public boolean isDailySummaryEmail() { return dailySummaryEmail; }
     public void setDailySummaryEmail(boolean dailySummaryEmail) { this.dailySummaryEmail = dailySummaryEmail; }
+
+    public boolean isTwoFactorEnabled() { return twoFactorEnabled; }
+    public void setTwoFactorEnabled(boolean twoFactorEnabled) { this.twoFactorEnabled = twoFactorEnabled; }
 }
