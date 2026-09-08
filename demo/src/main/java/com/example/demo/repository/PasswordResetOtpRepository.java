@@ -12,5 +12,8 @@ public interface PasswordResetOtpRepository extends JpaRepository<PasswordResetO
     /** The most recent code issued for this phone (re-issue replaces the old one). */
     Optional<PasswordResetOtp> findFirstByPhoneOrderByCreatedAtDesc(String phone);
 
+    /** The most recent row carrying this resetToken for the phone (confirm step). */
+    Optional<PasswordResetOtp> findFirstByPhoneAndResetTokenOrderByCreatedAtDesc(String phone, String resetToken);
+
     void deleteByPhone(String phone);
 }
