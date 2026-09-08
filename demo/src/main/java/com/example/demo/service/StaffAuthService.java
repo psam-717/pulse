@@ -63,13 +63,25 @@ public class StaffAuthService {
         this.otpDevMode = otpDevMode;
     }
 
-    /** Step 1 — validate credentials, issue the OTP, return no token yet. */
+    /** Step 1 — validate credentials. If the account has 2FA enabled, issue
+     *  the OTP and return no token yet; otherwise return the real JWT now
+     *  (per-account toggle /settings/2fa). */
     @Transactional
-    public LoginResponse login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request, String userAgent) {
         String email = request.email().trim().toLowerCase();
         StaffMember staff = findActiveStaff(email, request.password());
 
-        // Replace any previous code for this account (single active code)
+        if (!staff.isTwoFactorEnabled()) {
+            String sid = accountSettingsService.registerSession(staff.getId(), userAgent);
+            String token = jwtUtil.generateStaffToken(
+                    staff.getId(), staff.getFacilityId(), staff.getRole().name(), sid);
+            WorkspaceSessionResponse session = WorkspaceSessionResponse.from(staff);
+            return new LoginResponse(token, session.role(), staff.getId(),
+                    "Login successful", session, null);
+        }
+
+        // 2FA enabled: replace any previous code for this account (single
+        // active code)
         loginOtpRepository.deleteByEmail(email);
         String otp = generateOtp();
         loginOtpRepository.save(new LoginOtp(email, otp,

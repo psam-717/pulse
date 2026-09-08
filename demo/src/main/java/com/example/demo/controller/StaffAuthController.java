@@ -22,8 +22,9 @@ public class StaffAuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(staffAuthService.login(request));
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
+                                               @RequestHeader(value = "User-Agent", required = false) String userAgent) {
+        return ResponseEntity.ok(staffAuthService.login(request, userAgent));
     }
 
     @PostMapping("/login/verify-otp")
