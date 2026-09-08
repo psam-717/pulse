@@ -49,6 +49,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Component
@@ -431,6 +432,7 @@ public class DataSeeder implements CommandLineRunner {
         ensureDemoBookings();
         refreshStaleDemoQueueTimestamps();
         backfillQueueClinicianIds();
+        ensureDemoClinicalRecords();
     }
 
     /**
@@ -960,6 +962,71 @@ public class DataSeeder implements CommandLineRunner {
                 patientRepository.count(), queueEntryRepository.count());
 
         ensureDoctorWorkspaceDemo(facility);
+    }
+
+    /**
+     * Demo hygiene: clinical record authoring is brand new (backend issue
+     * #41) — seed a couple of visits + prescriptions for the first demo
+     * patient so staff reads and the patient mobile Records tab have data.
+     * Only seeds when the patient has none yet (idempotent across boots).
+     */
+    private void ensureDemoClinicalRecords() {
+        Hospital facility = hospitalRepository.findAll().stream().findFirst().orElse(null);
+        if (facility == null) return;
+        Patient kwame = patientRepository.findByPhone("+233 24 111 0001").orElse(null);
+        if (kwame == null) return;
+        if (!visitRecordRepository.findByPatientIdOrderByVisitDateDesc(kwame.getId()).isEmpty()) {
+            return;
+        }
+        StaffMember doctor = staffMemberRepository.findAll().stream()
+                .filter(s -> "owusu@pulsehealth.test".equals(s.getEmail()))
+                .findFirst().orElse(null);
+        String doctorName = doctor != null ? doctor.getName() : "Dr. Owusu Bempah";
+        String hospitalName = facility.getName();
+
+        LocalDate today = LocalDate.now();
+        VisitRecord v1 = new VisitRecord();
+        v1.setPatientId(kwame.getId());
+        v1.setPublicId("VR-DEMO-001");
+        v1.setDepartment("Cardiology");
+        v1.setHospital(hospitalName);
+        v1.setVisitDate(today.minusDays(12));
+        v1.setDoctor(doctorName);
+        v1.setSummary("Routine cardiology review. Blood pressure 128/82, stable. Advised continued " +
+                "exercise and reduced sodium intake. Follow-up in 3 months.");
+        visitRecordRepository.save(v1);
+
+        VisitRecord v2 = new VisitRecord();
+        v2.setPatientId(kwame.getId());
+        v2.setPublicId("VR-DEMO-002");
+        v2.setDepartment("Cardiology");
+        v2.setHospital(hospitalName);
+        v2.setVisitDate(today.minusDays(2));
+        v2.setDoctor(doctorName);
+        v2.setSummary("Chest discomfort reported. ECG normal, no acute changes. Prescribed " +
+                "Lisinopril 10mg daily; book stress test.");
+        visitRecordRepository.save(v2);
+
+        PrescriptionRecord r1 = new PrescriptionRecord();
+        r1.setPatientId(kwame.getId());
+        r1.setPublicId("RX-DEMO-001");
+        r1.setMedication("Lisinopril");
+        r1.setDose("10 mg once daily");
+        r1.setPrescribedDate(today.minusDays(12));
+        r1.setPrescribingDoctor(doctorName);
+        r1.setHospital(hospitalName);
+        prescriptionRecordRepository.save(r1);
+
+        PrescriptionRecord r2 = new PrescriptionRecord();
+        r2.setPatientId(kwame.getId());
+        r2.setPublicId("RX-DEMO-002");
+        r2.setMedication("Atorvastatin");
+        r2.setDose("20 mg once nightly");
+        r2.setPrescribedDate(today.minusDays(2));
+        r2.setPrescribingDoctor(doctorName);
+        r2.setHospital(hospitalName);
+        prescriptionRecordRepository.save(r2);
+        log.info("✅ Demo clinical records seeded for {}", kwame.getFirstName());
     }
 
     /**
