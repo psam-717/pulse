@@ -46,25 +46,33 @@ public class AppointmentService {
     private final BookingRepository bookingRepository;
     private final QueueEntryRepository queueEntryRepository;
     private final DepartmentRepository departmentRepository;
+    private final com.example.demo.repository.StaffMemberRepository staffMemberRepository;
 
     public AppointmentService(BookingRepository bookingRepository,
                               QueueEntryRepository queueEntryRepository,
-                              DepartmentRepository departmentRepository) {
+                              DepartmentRepository departmentRepository,
+                              com.example.demo.repository.StaffMemberRepository staffMemberRepository) {
         this.bookingRepository = bookingRepository;
         this.queueEntryRepository = queueEntryRepository;
         this.departmentRepository = departmentRepository;
+        this.staffMemberRepository = staffMemberRepository;
     }
 
     // ===== Read =====
 
-    /** Day view: GET /appointments?date&departmentId?&status? (defaults to today). */
+    /** Day view: GET /appointments?date&departmentId?&status? (defaults to today).
+     *  staffId scopes to one clinician (workspace "My Appointments") — matched
+     *  by the stable staff↔legacy-doctor email link, NOT the display name, so
+     *  profile renames never orphan a doctor's appointments. */
     public List<AppointmentResponse> listForDay(Long facilityId, LocalDate date,
-                                                String departmentId, String status) {
+                                                String departmentId, String status,
+                                                Long staffId) {
         List<Booking> bookings = (departmentId == null || departmentId.isBlank() || "all".equals(departmentId))
                 ? bookingRepository.findByTimeSlot_Date(date)
                 : bookingRepository.findByTimeSlot_DateAndDepartmentId(date, parseDeptId(departmentId));
         return bookings.stream()
                 .filter(b -> belongsToFacility(b, facilityId))
+                .filter(b -> staffId == null || matchesStaff(b, staffId))
                 .filter(b -> status == null || status.isBlank() || "all".equals(status)
                         || status.equals(deriveStatus(b)))
                 .sorted(Comparator.comparing(AppointmentService::scheduledAt))
@@ -73,16 +81,18 @@ public class AppointmentService {
     }
 
     /** Range view: GET /appointments?from&to (week/month calendar). */
-    public List<AppointmentResponse> listForRange(Long facilityId, LocalDate from, LocalDate to) {
+    public List<AppointmentResponse> listForRange(Long facilityId, LocalDate from, LocalDate to,
+                                                  Long staffId) {
         return bookingRepository.findByTimeSlot_DateBetween(from, to).stream()
                 .filter(b -> belongsToFacility(b, facilityId))
+                .filter(b -> staffId == null || matchesStaff(b, staffId))
                 .sorted(Comparator.comparing(AppointmentService::scheduledAt))
                 .map(this::toResponse)
                 .toList();
     }
 
     public AppointmentStatsResponse statsForDay(Long facilityId, LocalDate date) {
-        List<AppointmentResponse> day = listForDay(facilityId, date, null, null);
+        List<AppointmentResponse> day = listForDay(facilityId, date, null, null, null);
         return new AppointmentStatsResponse(
                 day.size(),
                 countStatus(day, "scheduled"),
@@ -277,6 +287,15 @@ public class AppointmentService {
                 ? d.getFacilityId()
                 : (b.getHospital() != null ? b.getHospital().getId() : null);
         return facilityId.equals(deptFacility);
+    }
+
+    /** Staff↔legacy-doctor match by email — stable across display-name edits. */
+    private boolean matchesStaff(Booking b, Long staffId) {
+        if (b.getDoctor() == null || b.getDoctor().getEmail() == null) return false;
+        return staffMemberRepository.findById(staffId)
+                .map(s -> s.getEmail() != null
+                        && s.getEmail().equalsIgnoreCase(b.getDoctor().getEmail()))
+                .orElse(false);
     }
 
     private static Long parseDeptId(String departmentId) {
