@@ -2,6 +2,7 @@ package com.example.demo.model;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Entity
@@ -63,6 +64,11 @@ public class Booking {
      *  pre-P3 rows until the seeder backfills. */
     private LocalDateTime payByDeadline;
 
+    /** Instant the patient paid the GH¢20 earlier-reschedule surcharge.
+     *  Cleared once the next earlier move completes, so each earlier move
+     *  charges again. Null = the surcharge is still owed for an earlier move. */
+    private Instant rescheduleSurchargePaidAt;
+
     public Booking() {}
 
     public Booking(Patient patient, Doctor doctor, Department department, Hospital hospital,
@@ -123,4 +129,9 @@ public class Booking {
 
     public LocalDateTime getPayByDeadline() { return payByDeadline; }
     public void setPayByDeadline(LocalDateTime payByDeadline) { this.payByDeadline = payByDeadline; }
+
+    public Instant getRescheduleSurchargePaidAt() { return rescheduleSurchargePaidAt; }
+    public void setRescheduleSurchargePaidAt(Instant rescheduleSurchargePaidAt) {
+        this.rescheduleSurchargePaidAt = rescheduleSurchargePaidAt;
+    }
 }
