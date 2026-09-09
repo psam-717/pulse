@@ -55,6 +55,10 @@ public class SecurityConfig {
                         "/api/auth/patient/password-reset/confirm",
                         "/api/auth/patient/resend-otp").permitAll()
                 .requestMatchers("/api/auth/login", "/api/auth/login/verify-otp").permitAll()
+                // Staff (web) password reset — email code flow
+                .requestMatchers("/api/auth/password-reset/request",
+                        "/api/auth/password-reset/verify",
+                        "/api/auth/password-reset/confirm").permitAll()
                 .requestMatchers("/api/auth/admin/**").permitAll()
                 // Hospital registration & login -- public
                 .requestMatchers("/api/hospitals/register", "/api/hospitals/login").permitAll()
