@@ -9,5 +9,9 @@ public record CreateVisitNoteRequest(
         @Size(max = 5000, message = "Summary too long")
         String summary,
         // Optional YYYY-MM-DD; defaults to today.
-        String visitDate
+        String visitDate,
+        @Size(max = 2000, message = "Symptoms too long")
+        String symptoms,
+        @Size(max = 2000, message = "Recommendations too long")
+        String recommendations
 ) {}

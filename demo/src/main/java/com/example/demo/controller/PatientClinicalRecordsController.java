@@ -74,7 +74,8 @@ public class PatientClinicalRecordsController {
         SessionContext ctx = sessionContext();
         MedicalRecordsResponse.Visit visit = recordsService.addVisit(
                 patientId, ctx.department(), ctx.hospital(), parseDate(request.visitDate(), "visitDate"),
-                ctx.doctorName(), request.summary());
+                ctx.doctorName(), request.summary(),
+                request.symptoms(), request.recommendations());
         return ResponseEntity.ok(visit);
     }
 
@@ -88,7 +89,7 @@ public class PatientClinicalRecordsController {
         MedicalRecordsResponse.Prescription rx = recordsService.addPrescription(
                 patientId, request.medication(), request.dose(),
                 parseDate(request.prescribedDate(), "prescribedDate"),
-                ctx.doctorName(), ctx.hospital());
+                ctx.doctorName(), ctx.hospital(), request.instructions());
         return ResponseEntity.ok(rx);
     }
 

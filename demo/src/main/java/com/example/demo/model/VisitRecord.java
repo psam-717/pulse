@@ -34,6 +34,14 @@ public class VisitRecord {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String summary;
 
+    /** Optional consult findings (staff-authored or queue-complete snapshot). */
+    @Column(columnDefinition = "TEXT")
+    private String symptoms;
+
+    /** Optional follow-up / care guidance (staff-authored or queue-complete snapshot). */
+    @Column(columnDefinition = "TEXT")
+    private String recommendations;
+
     public VisitRecord() {}
 
     public Long getId() { return id; }
@@ -58,4 +66,10 @@ public class VisitRecord {
 
     public String getSummary() { return summary; }
     public void setSummary(String summary) { this.summary = summary; }
+
+    public String getSymptoms() { return symptoms; }
+    public void setSymptoms(String symptoms) { this.symptoms = symptoms; }
+
+    public String getRecommendations() { return recommendations; }
+    public void setRecommendations(String recommendations) { this.recommendations = recommendations; }
 }

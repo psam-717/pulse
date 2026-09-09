@@ -1,17 +1,23 @@
 package com.example.demo.service;
 
+import com.example.demo.dto.CompleteConsultRequest;
+import com.example.demo.dto.CompleteConsultRequest.PrescriptionItem;
 import com.example.demo.dto.QueueDepartmentResponse;
 import com.example.demo.dto.QueueEntryResponse;
 import com.example.demo.exception.ConflictException;
 import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.model.Booking;
 import com.example.demo.model.Department;
+import com.example.demo.model.Hospital;
 import com.example.demo.model.Patient;
 import com.example.demo.model.PatientSource;
 import com.example.demo.model.QueueEntry;
 import com.example.demo.model.QueuePriority;
 import com.example.demo.model.QueueStatus;
 import com.example.demo.model.StaffMember;
+import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.DepartmentRepository;
+import com.example.demo.repository.HospitalRepository;
 import com.example.demo.repository.PatientRepository;
 import com.example.demo.repository.QueueEntryRepository;
 import com.example.demo.repository.StaffMemberRepository;
@@ -21,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -42,17 +49,29 @@ public class QueueService {
     private final StaffMemberRepository staffMemberRepository;
     private final PatientRepository patientRepository;
     private final NotificationService notificationService;
+    private final BookingRepository bookingRepository;
+    private final HospitalRepository hospitalRepository;
+    private final PatientNotificationService patientNotificationService;
+    private final PatientRecordsService patientRecordsService;
 
     public QueueService(QueueEntryRepository queueEntryRepository,
                         DepartmentRepository departmentRepository,
                         StaffMemberRepository staffMemberRepository,
                         PatientRepository patientRepository,
-                        NotificationService notificationService) {
+                        NotificationService notificationService,
+                        BookingRepository bookingRepository,
+                        HospitalRepository hospitalRepository,
+                        PatientNotificationService patientNotificationService,
+                        PatientRecordsService patientRecordsService) {
         this.queueEntryRepository = queueEntryRepository;
         this.departmentRepository = departmentRepository;
         this.staffMemberRepository = staffMemberRepository;
         this.patientRepository = patientRepository;
         this.notificationService = notificationService;
+        this.bookingRepository = bookingRepository;
+        this.hospitalRepository = hospitalRepository;
+        this.patientNotificationService = patientNotificationService;
+        this.patientRecordsService = patientRecordsService;
     }
 
     /** Per-department summaries for the sidebar / dept tabs. */
@@ -126,6 +145,19 @@ public class QueueService {
             target.setClinicianId(staffId);
         }
         queueEntryRepository.save(target);
+        // Patient "you're next" ping (mobile in-app feed) — best-effort,
+        // never fails call-next. The staff fan-out below stays intact.
+        if (target.getPatientId() != null) {
+            try {
+                patientNotificationService.create(target.getPatientId(), "queue",
+                        "Now serving",
+                        "Ticket " + target.getTicketNumber()
+                                + " — you're next. Please head to the consultation room.",
+                        null);
+            } catch (Exception e) {
+                log.warn("Patient now-serving notification failed for entry {}", target.getId(), e);
+            }
+        }
         // Phase 3: front desk + admins of the department's facility get a
         // "now serving" ping so they can update boards / catch no-shows.
         try {
@@ -218,6 +250,70 @@ public class QueueService {
         return QueueEntryResponse.from(entry);
     }
 
+    /**
+     * Clinician closes a consultation (POST /queue/entries/{id}/complete):
+     * the ticket moves IN_CONSULTATION → COMPLETED, a linked booking flips
+     * to 'completed' (the queue is the authority — the appointment state
+     * machine treats completed as terminal and is deliberately bypassed),
+     * and the consult is snapshotted into the patient's medical record:
+     * always one visit note, plus one prescription per item. The patient
+     * gets an in-app "consultation completed" ping. Name resolution is
+     * best-effort — completion never fails on it.
+     */
+    @Transactional
+    public QueueEntryResponse completeConsultation(Long entryId, Long staffId,
+                                                   CompleteConsultRequest req) {
+        QueueEntry entry = queueEntryRepository.findById(entryId)
+                .orElseThrow(() -> new IllegalArgumentException("Queue entry not found"));
+        if (entry.getStatus() != QueueStatus.IN_CONSULTATION) {
+            throw new ConflictException("Cannot complete ticket " + entry.getTicketNumber()
+                    + " from '" + entry.getStatus().name().toLowerCase()
+                    + "' — only in-consultation tickets can be completed");
+        }
+        entry.setStatus(QueueStatus.COMPLETED);
+        queueEntryRepository.save(entry);
+
+        Booking booking = null;
+        if (entry.getBookingId() != null) {
+            booking = bookingRepository.findById(entry.getBookingId()).orElse(null);
+            if (booking != null) {
+                booking.setAppointmentStatus("completed");
+                bookingRepository.save(booking);
+            }
+        }
+
+        if (entry.getPatientId() != null) {
+            ConsultContext ctx = consultContext(entry, staffId);
+            String dateLabel = LocalDate.now().toString();
+            if (booking != null && booking.getTimeSlot() != null
+                    && booking.getTimeSlot().getDate() != null) {
+                dateLabel = booking.getTimeSlot().getDate().toString();
+            }
+            String summary = req != null && req.summary() != null ? req.summary() : "";
+            patientRecordsService.addVisit(entry.getPatientId(), ctx.department(), ctx.hospital(),
+                    LocalDate.now(), ctx.doctorName(), summary,
+                    req != null ? req.symptoms() : null,
+                    req != null ? req.recommendations() : null);
+            if (req != null && req.prescriptions() != null) {
+                for (PrescriptionItem item : req.prescriptions()) {
+                    patientRecordsService.addPrescription(entry.getPatientId(),
+                            item.medication(), item.dose(), LocalDate.now(),
+                            ctx.doctorName(), ctx.hospital(), item.instructions());
+                }
+            }
+            try {
+                patientNotificationService.create(entry.getPatientId(), "appointment",
+                        "Consultation completed",
+                        "Your consultation at " + ctx.department() + " on " + dateLabel
+                                + " is complete — your records have been updated.",
+                        null);
+            } catch (Exception e) {
+                log.warn("Patient completion notification failed for entry {}", entryId, e);
+            }
+        }
+        return QueueEntryResponse.from(entry);
+    }
+
     // ===== Helpers =====
 
     private QueueDepartmentResponse summarize(Department d, List<QueueEntry> all) {
@@ -242,4 +338,41 @@ public class QueueService {
                 serving != null ? serving.getTicketNumber() : null,
                 longest, severity);
     }
+
+    /** Author snapshot for the completed consult's medical record: the
+     *  staff session wins (mirrors PatientClinicalRecordsController), the
+     *  queue entry's department row is the fallback, 'General' last. All
+     *  resolution is best-effort so completion never fails on it. */
+    private ConsultContext consultContext(QueueEntry entry, Long staffId) {
+        StaffMember staff = staffId != null
+                ? staffMemberRepository.findById(staffId).orElse(null) : null;
+        Department entryDept = null;
+        if (entry.getDepartmentId() != null) {
+            try {
+                entryDept = departmentRepository.findById(Long.valueOf(entry.getDepartmentId()))
+                        .orElse(null);
+            } catch (NumberFormatException ignored) {
+                // Unknown department id → fall back to the defaults below.
+            }
+        }
+        String department = staff != null && staff.getDepartmentName() != null
+                && !staff.getDepartmentName().isBlank()
+                ? staff.getDepartmentName()
+                : (entryDept != null && entryDept.getName() != null ? entryDept.getName() : "General");
+        String hospital = "General";
+        Long facilityId = staff != null ? staff.getFacilityId() : null;
+        if (facilityId == null && entryDept != null) {
+            facilityId = entryDept.getFacilityId();
+        }
+        if (facilityId != null) {
+            hospital = hospitalRepository.findById(facilityId)
+                    .map(Hospital::getName).orElse("General");
+        }
+        String doctor = staff != null && staff.getName() != null
+                ? staff.getName()
+                : (entry.getClinician() != null ? entry.getClinician() : "");
+        return new ConsultContext(department, hospital, doctor);
+    }
+
+    private record ConsultContext(String department, String hospital, String doctorName) {}
 }

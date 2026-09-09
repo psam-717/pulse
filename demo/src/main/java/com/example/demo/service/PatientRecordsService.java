@@ -60,7 +60,9 @@ public class PatientRecordsService {
                 v.getHospital(),
                 v.getVisitDate().toString(),
                 v.getDoctor(),
-                v.getSummary());
+                v.getSummary(),
+                v.getSymptoms(),
+                v.getRecommendations());
     }
 
     // ===================== staff authoring (Phase 6) =====================
@@ -73,7 +75,8 @@ public class PatientRecordsService {
      */
     @Transactional
     public Visit addVisit(Long patientId, String department, String hospital,
-                          LocalDate visitDate, String doctor, String summary) {
+                          LocalDate visitDate, String doctor, String summary,
+                          String symptoms, String recommendations) {
         VisitRecord record = new VisitRecord();
         record.setPatientId(patientId);
         record.setPublicId(newPublicId("VR"));
@@ -82,13 +85,16 @@ public class PatientRecordsService {
         record.setVisitDate(visitDate != null ? visitDate : LocalDate.now());
         record.setDoctor(doctor);
         record.setSummary(summary);
+        record.setSymptoms(symptoms);
+        record.setRecommendations(recommendations);
         return toVisit(visitRecordRepository.save(record));
     }
 
     /** Staff (facility web) records a prescription. */
     @Transactional
     public Prescription addPrescription(Long patientId, String medication, String dose,
-                                        LocalDate prescribedDate, String doctor, String hospital) {
+                                        LocalDate prescribedDate, String doctor, String hospital,
+                                        String instructions) {
         PrescriptionRecord record = new PrescriptionRecord();
         record.setPatientId(patientId);
         record.setPublicId(newPublicId("RX"));
@@ -97,6 +103,7 @@ public class PatientRecordsService {
         record.setPrescribedDate(prescribedDate != null ? prescribedDate : LocalDate.now());
         record.setPrescribingDoctor(doctor);
         record.setHospital(hospital);
+        record.setInstructions(instructions);
         return toRx(prescriptionRecordRepository.save(record));
     }
 
@@ -122,7 +129,8 @@ public class PatientRecordsService {
                 p.getDose(),
                 p.getPrescribingDoctor(),
                 p.getHospital(),
-                p.getPrescribedDate().toString());
+                p.getPrescribedDate().toString(),
+                p.getInstructions());
     }
 
     private List<LabValue> parseValues(String json) {

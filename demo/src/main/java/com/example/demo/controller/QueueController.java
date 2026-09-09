@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.config.SecurityUtils;
 import com.example.demo.dto.CallNextRequest;
+import com.example.demo.dto.CompleteConsultRequest;
 import com.example.demo.dto.CreateWalkInRequest;
 import com.example.demo.dto.QueueCancelResponse;
 import com.example.demo.dto.QueueDepartmentResponse;
@@ -98,5 +99,14 @@ public class QueueController {
     public ResponseEntity<QueueEntryResponse> updateStatus(
             @PathVariable Long id, @Valid @RequestBody UpdateQueueStatusRequest request) {
         return ResponseEntity.ok(queueService.updateStatus(id, request.status()));
+    }
+
+    @PostMapping("/entries/{id}/complete")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR','NURSE')")
+    public ResponseEntity<QueueEntryResponse> completeConsultation(
+            @PathVariable Long id,
+            @Valid @RequestBody CompleteConsultRequest request) {
+        Long staffId = SecurityUtils.requireStaffId();
+        return ResponseEntity.ok(queueService.completeConsultation(id, staffId, request));
     }
 }

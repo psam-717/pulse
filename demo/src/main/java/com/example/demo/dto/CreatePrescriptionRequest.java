@@ -12,5 +12,7 @@ public record CreatePrescriptionRequest(
         @Size(max = 120, message = "Dose too long")
         String dose,
         // Optional YYYY-MM-DD; defaults to today.
-        String prescribedDate
+        String prescribedDate,
+        @Size(max = 500, message = "Instructions too long")
+        String instructions
 ) {}
