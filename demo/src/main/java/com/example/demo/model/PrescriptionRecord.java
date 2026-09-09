@@ -34,6 +34,10 @@ public class PrescriptionRecord {
     @Column(nullable = false)
     private LocalDate prescribedDate;
 
+    /** Optional how-to-take guidance (staff-authored or queue-complete snapshot). */
+    @Column(length = 255)
+    private String instructions;
+
     public PrescriptionRecord() {}
 
     public Long getId() { return id; }
@@ -58,4 +62,7 @@ public class PrescriptionRecord {
 
     public LocalDate getPrescribedDate() { return prescribedDate; }
     public void setPrescribedDate(LocalDate prescribedDate) { this.prescribedDate = prescribedDate; }
+
+    public String getInstructions() { return instructions; }
+    public void setInstructions(String instructions) { this.instructions = instructions; }
 }
