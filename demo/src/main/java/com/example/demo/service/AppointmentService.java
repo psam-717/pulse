@@ -255,10 +255,15 @@ public class AppointmentService {
     private QueueEntry buildQueueEntry(Booking booking) {
         String deptId = String.valueOf(booking.getDepartment().getId());
         LocalDateTime now = LocalDateTime.now();
-        long todayCount = queueEntryRepository.countByDepartmentIdAndCheckInAtAfter(
-                deptId, LocalDate.now().atStartOfDay());
         String prefix = departmentPrefix(booking.getDepartment());
-        String ticket = prefix + "-" + String.format("%03d", todayCount + 1);
+        // Collision-proof: next ticket = highest sequence ever issued for this
+        // prefix + 1 (same scheme as QueueService walk-ins / PatientQueueService).
+        // The old "count of today's entries + 1" scheme collided with historical
+        // tickets — e.g. K-001 issued yesterday left the count at 0 today, so the
+        // generator re-issued K-001 and the check-in 409'd on the unique
+        // uk_queue_entries_ticket_number index ("nothing happens" on the button).
+        long nextSeq = queueEntryRepository.maxTicketSequenceForPrefix(prefix) + 1;
+        String ticket = prefix + "-" + String.format("%03d", nextSeq);
 
         QueuePriority priority;
         try {
