@@ -8,6 +8,7 @@ import com.example.demo.model.*;
 import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.DepartmentRepository;
 import com.example.demo.repository.QueueEntryRepository;
+import com.example.demo.repository.TimeSlotRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -48,17 +49,20 @@ public class AppointmentService {
     private final DepartmentRepository departmentRepository;
     private final com.example.demo.repository.StaffMemberRepository staffMemberRepository;
     private final PatientNotificationService patientNotificationService;
+    private final TimeSlotRepository timeSlotRepository;
 
     public AppointmentService(BookingRepository bookingRepository,
                               QueueEntryRepository queueEntryRepository,
                               DepartmentRepository departmentRepository,
                               com.example.demo.repository.StaffMemberRepository staffMemberRepository,
-                              PatientNotificationService patientNotificationService) {
+                              PatientNotificationService patientNotificationService,
+                              TimeSlotRepository timeSlotRepository) {
         this.bookingRepository = bookingRepository;
         this.queueEntryRepository = queueEntryRepository;
         this.departmentRepository = departmentRepository;
         this.staffMemberRepository = staffMemberRepository;
         this.patientNotificationService = patientNotificationService;
+        this.timeSlotRepository = timeSlotRepository;
     }
 
     // ===== Read =====
@@ -153,6 +157,20 @@ public class AppointmentService {
             booking.setCheckInTime(null);
             removeQueueEntriesFor(booking);
             log.info("Appointment {} check-in undone", referenceOf(booking));
+        }
+        if ("cancelled".equals(targetStatus)) {
+            // Staff cancel is a real cancel (mirrors BookingService.cancelBooking):
+            // flip the legacy patient-facing status so cancelled appointments stop
+            // leaking into the patient's outstanding-payments list, and free the
+            // slot so the day can be re-booked.
+            booking.setStatus(BookingStatus.CANCELLED);
+            TimeSlot slot = booking.getTimeSlot();
+            if (slot != null && slot.isBooked()) {
+                slot.setBooked(false);
+                timeSlotRepository.save(slot);
+            }
+            log.info("Appointment {} cancelled by staff — booking cancelled, slot freed",
+                    referenceOf(booking));
         }
         if ("confirmed".equals(targetStatus) || "cancelled".equals(targetStatus)) {
             notifyPatientOfBookingChange(booking, targetStatus);

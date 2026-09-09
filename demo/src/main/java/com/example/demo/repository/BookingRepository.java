@@ -47,6 +47,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             WHERE b.patient.id = :patientId
               AND b.paymentStatus <> com.example.demo.model.PaymentStatus.PAID
               AND b.status <> com.example.demo.model.BookingStatus.CANCELLED
+              AND (b.appointmentStatus IS NULL OR b.appointmentStatus <> 'cancelled')
               AND (b.checkedIn IS NULL OR b.checkedIn = false)
             ORDER BY b.payByDeadline ASC NULLS LAST
             """)
