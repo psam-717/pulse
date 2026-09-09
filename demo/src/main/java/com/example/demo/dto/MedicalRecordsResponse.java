@@ -17,7 +17,9 @@ public record MedicalRecordsResponse(
             String hospital,
             String date,
             String doctor,
-            String summary
+            String summary,
+            String symptoms,
+            String recommendations
     ) {}
 
     public record LabValue(
@@ -42,6 +44,7 @@ public record MedicalRecordsResponse(
             String dose,
             String prescribingDoctor,
             String hospital,
-            String date
+            String date,
+            String instructions
     ) {}
 }
