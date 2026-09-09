@@ -126,6 +126,7 @@ public class DataSeeder implements CommandLineRunner {
             seedTimeSlotsIfEmpty();
             ensureFacilityDemoData();
             ensureKnustWebDoctor();
+            ensureKnustAdmin();
             ensureDemoMedicalProfiles();
             ensureDiscoveryDemoData();
             ensureDemoInsurance();
