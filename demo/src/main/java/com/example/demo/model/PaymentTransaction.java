@@ -37,6 +37,12 @@ public class PaymentTransaction {
     @Column(nullable = false)
     private String provider = "aza";
 
+    /** What this transaction pays for: {@code BOOKING_FEE} (default, existing
+     *  behavior) or {@code RESCHEDULE_SURCHARGE} (GH¢20 earlier-move fee).
+     *  completeSession branches on it. Explicitly set at creation. */
+    @Column(length = 32)
+    private String kind = "BOOKING_FEE";
+
     @ElementCollection
     @CollectionTable(name = "payment_transaction_bookings",
             joinColumns = @JoinColumn(name = "transaction_id"))
@@ -69,6 +75,9 @@ public class PaymentTransaction {
 
     public String getProvider() { return provider; }
     public void setProvider(String provider) { this.provider = provider; }
+
+    public String getKind() { return kind; }
+    public void setKind(String kind) { this.kind = kind; }
 
     public List<Long> getBookingIds() { return bookingIds; }
     public void setBookingIds(List<Long> bookingIds) { this.bookingIds = bookingIds; }
