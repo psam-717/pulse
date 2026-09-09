@@ -236,6 +236,7 @@ public class DataSeeder implements CommandLineRunner {
         // Facility-plane demo accounts + departments (web dashboard login)
         ensureFacilityDemoData();
         ensureKnustWebDoctor();
+        ensureKnustAdmin();
         ensureDemoMedicalProfiles();
         ensureDiscoveryDemoData();
         ensureDemoInsurance();
@@ -1436,6 +1437,43 @@ public class DataSeeder implements CommandLineRunner {
                 null, knust.getId(), passwordEncoder.encode("Password123!")));
         ensureLegacyDoctorsForStaff(knust);
         log.info("✅ KNUST web demo doctor ensured ({})", email);
+    }
+
+    /**
+     * KNUST University Hospital web-login demo ADMIN (staff plane, facility
+     * 3). Mirrors ensureKnustWebDoctor: the legacy demo roster only fills the
+     * FIRST hospital, so KNUST needs its own facility-scoped ADMIN for the
+     * web dashboard / settings / staff management. Idempotent by email;
+     * login Password123! (dev only).
+     */
+    private void ensureKnustAdmin() {
+        Hospital knust = hospitalRepository.findAll().stream()
+                .filter(h -> h.getName() != null && h.getName().contains("KNUST"))
+                .findFirst()
+                .orElse(null);
+        if (knust == null) {
+            return;
+        }
+        String email = "admin@knust-hospital.test";
+        if (staffMemberRepository.existsByEmail(email)) {
+            return;
+        }
+
+        Department dept = departmentRepository.findByAbbreviation("K-GOPD")
+                .filter(d -> knust.getId().equals(d.getFacilityId()))
+                .orElseGet(() -> departmentRepository.findByFacilityId(knust.getId()).stream()
+                        .findFirst().orElse(null));
+
+        staffMemberRepository.save(new StaffMember(
+                "KNUST Administrator", StaffRole.ADMIN, "Chief Administrator",
+                "",
+                dept != null ? String.valueOf(dept.getId()) : "",
+                dept != null ? dept.getName() : "",
+                email, "+233 500 111 003",
+                "08:00", "17:00",
+                StaffDutyStatus.ON_DUTY, StaffAccountStatus.ACTIVE,
+                null, knust.getId(), passwordEncoder.encode("Password123!")));
+        log.info("✅ KNUST web demo admin ensured ({})", email);
     }
 
     private Patient ensurePatient(String firstName, String lastName, Gender gender,
