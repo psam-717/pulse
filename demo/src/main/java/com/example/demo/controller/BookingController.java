@@ -5,11 +5,14 @@ import com.example.demo.dto.BookingRequest;
 import com.example.demo.dto.BookingResponse;
 import com.example.demo.dto.BookingSummaryResponse;
 import com.example.demo.dto.CancelBookingRequest;
+import com.example.demo.dto.CheckoutResponse;
 import com.example.demo.dto.MobileBookingRequest;
 import com.example.demo.dto.PaymentUpdateRequest;
 import com.example.demo.dto.RescheduleRequest;
+import com.example.demo.dto.RescheduleSurchargePayRequest;
 import com.example.demo.dto.UpdatePayByDeadlineRequest;
 import com.example.demo.service.BookingService;
+import com.example.demo.service.PaymentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -25,9 +28,11 @@ import java.time.format.DateTimeParseException;
 public class BookingController {
 
     private final BookingService bookingService;
+    private final PaymentService paymentService;
 
-    public BookingController(BookingService bookingService) {
+    public BookingController(BookingService bookingService, PaymentService paymentService) {
         this.bookingService = bookingService;
+        this.paymentService = paymentService;
     }
 
     @PostMapping
@@ -55,6 +60,21 @@ public class BookingController {
             @PathVariable Long id,
             @RequestBody RescheduleRequest request) {
         return ResponseEntity.ok(bookingService.reschedule(id, currentUserId(), request));
+    }
+
+    /**
+     * Pay the GH¢20 earlier-reschedule surcharge for one booking. Hit this
+     * when PATCH /{id}/reschedule returns 402 EARLIER_RESCHEDULE_SURCHARGE_REQUIRED,
+     * then retry the same reschedule request. Body: {@code {methodId}}.
+     */
+    @PostMapping("/{id}/reschedule/surcharge")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<CheckoutResponse> payRescheduleSurcharge(
+            @PathVariable Long id,
+            @RequestBody(required = false) RescheduleSurchargePayRequest request) {
+        Long methodId = request != null ? request.methodId() : null;
+        return ResponseEntity.ok(
+                paymentService.startSurchargeCheckout(currentUserId(), id, methodId));
     }
 
     @PatchMapping("/{id}/pay-by-deadline")
