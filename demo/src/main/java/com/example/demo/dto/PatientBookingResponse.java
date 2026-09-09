@@ -9,5 +9,7 @@ public record PatientBookingResponse(
         String doctorName,
         String scheduledAt,
         String status,          // scheduled | confirmed | checked_in | completed | cancelled | no_show
-        String paymentStatus    // pending | paid | failed | refunded
+        String paymentStatus,   // pending | paid | failed | refunded
+        Long departmentId,      // numeric, additive — deep links into dept/hospital screens
+        Long hospitalId
 ) {}
