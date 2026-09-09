@@ -10,6 +10,7 @@ import com.example.demo.dto.DoctorAvailabilityResponse;
 import com.example.demo.dto.MobileBookingRequest;
 import com.example.demo.dto.RescheduleRequest;
 import com.example.demo.exception.ConflictException;
+import com.example.demo.exception.SurchargeRequiredException;
 import com.example.demo.model.*;
 import com.example.demo.repository.*;
 import org.springframework.data.domain.Page;
@@ -39,6 +40,9 @@ public class BookingService {
     private final MobileDiscoveryService mobileDiscoveryService;
     private final OperationalSettingsRepository operationalSettingsRepository;
     private final com.example.demo.repository.StaffMemberRepository staffMemberRepository;
+    private final QueueEntryRepository queueEntryRepository;
+    private final PatientNotificationService patientNotificationService;
+    private final NotificationService notificationService;
 
     private static final int DEFAULT_DEADLINE_HOURS = 48;
 
@@ -50,7 +54,10 @@ public class BookingService {
                           PatientRepository patientRepository,
                           MobileDiscoveryService mobileDiscoveryService,
                           OperationalSettingsRepository operationalSettingsRepository,
-                          com.example.demo.repository.StaffMemberRepository staffMemberRepository) {
+                          com.example.demo.repository.StaffMemberRepository staffMemberRepository,
+                          QueueEntryRepository queueEntryRepository,
+                          PatientNotificationService patientNotificationService,
+                          NotificationService notificationService) {
         this.hospitalRepository = hospitalRepository;
         this.departmentRepository = departmentRepository;
         this.doctorRepository = doctorRepository;
@@ -60,6 +67,9 @@ public class BookingService {
         this.mobileDiscoveryService = mobileDiscoveryService;
         this.operationalSettingsRepository = operationalSettingsRepository;
         this.staffMemberRepository = staffMemberRepository;
+        this.queueEntryRepository = queueEntryRepository;
+        this.patientNotificationService = patientNotificationService;
+        this.notificationService = notificationService;
     }
 
     public Page<Hospital> listHospitals(Pageable pageable) {
@@ -165,6 +175,9 @@ public class BookingService {
         booking.setStatus(BookingStatus.CANCELLED);
         booking.setPaymentStatus(PaymentStatus.REFUNDED);
         bookingRepository.save(booking);
+
+        // Patient in-app notification (same shape as the staff-cancel notice).
+        notifyCancelled(booking);
     }
 
     @Transactional
@@ -293,20 +306,58 @@ public class BookingService {
         return toSummary(bookingRepository.save(booking));
     }
 
+    /**
+     * Move a booking to another slot. Rules (reschedule-surcharge contract):
+     * <ul>
+     *   <li>Moving EARLIER costs a one-off GH¢20 surcharge
+     *       ({@link PaymentService#RESCHEDULE_SURCHARGE}): the first such move
+     *       with nothing paid throws {@link SurchargeRequiredException} (402)
+     *       BEFORE any slot work — pay via
+     *       POST /api/bookings/{id}/reschedule/surcharge, then retry. A paid
+     *       surcharge is cleared once the earlier move completes, so the next
+     *       earlier move charges again.</li>
+     *   <li>A booking in active consultation (IN_CONSULTATION queue row)
+     *       cannot move at all (409).</li>
+     *   <li>Moving a checked-in / WAITING-queued booking cancels its live
+     *       ticket and clears the check-in state, so the patient can check in
+     *       again on the new slot.</li>
+     * </ul>
+     */
     @Transactional
     public BookingSummaryResponse reschedule(Long bookingId, Long patientId, RescheduleRequest req) {
         Booking booking = requireOwnActiveBooking(bookingId, patientId);
-        if (Boolean.TRUE.equals(booking.getCheckedIn())) {
-            throw new IllegalStateException("This booking is already checked in and cannot be rescheduled.");
-        }
         LocalDate date = parseDate(req == null ? null : req.newDate(), "newDate");
         LocalTime time = parseTime(req == null ? null : req.newTime(), "newTime");
 
         TimeSlot old = booking.getTimeSlot();
         if (old != null && date.equals(old.getDate()) && time.equals(old.getStartTime())) {
+            // Same-slot no-op: just refresh the pay-by deadline (unchanged).
             booking.setPayByDeadline(LocalDateTime.now().plusHours(deadlineHoursFor(booking.getHospital())));
             return toSummary(bookingRepository.save(booking));
         }
+
+        // Earlier-than-original move (slot start times are LocalTime on a date).
+        LocalDateTime original = old != null && old.getStartTime() != null && old.getDate() != null
+                ? old.getDate().atTime(old.getStartTime())
+                : null;
+        boolean earlier = original != null && date.atTime(time).isBefore(original);
+
+        // Consultation is a hard blocker — the patient is with the clinician now.
+        QueueEntry queueRow = queueEntryRepository.findByBookingId(booking.getId()).orElse(null);
+        if (queueRow != null && queueRow.getStatus() == QueueStatus.IN_CONSULTATION) {
+            throw new ConflictException("You are being attended to now and cannot reschedule.");
+        }
+
+        // Unpaid earlier move → 402 before assertSlotBookable/claimSlot, so the
+        // failed request changes no booking/queue/slot state.
+        if (earlier && booking.getRescheduleSurchargePaidAt() == null) {
+            throw new SurchargeRequiredException(PaymentService.RESCHEDULE_SURCHARGE,
+                    "Moving your appointment earlier attracts a GH¢ 20 surcharge. "
+                            + "Pay it, then retry this request.");
+        }
+
+        boolean resetQueuedState = Boolean.TRUE.equals(booking.getCheckedIn())
+                || (queueRow != null && queueRow.getStatus() == QueueStatus.WAITING);
 
         assertSlotBookable(booking.getDepartment().getId(), date, time, booking.getId());
         Doctor doctor = pickDoctor(booking.getDepartment().getId(), date, time);
@@ -319,7 +370,23 @@ public class BookingService {
         booking.setTimeSlot(next);
         booking.setDoctor(doctor);
         booking.setPayByDeadline(LocalDateTime.now().plusHours(deadlineHoursFor(booking.getHospital())));
-        return toSummary(bookingRepository.save(booking));
+        if (earlier) {
+            // One paid surcharge covers one earlier move — clear it so the next
+            // earlier move must pay again.
+            booking.setRescheduleSurchargePaidAt(null);
+        }
+        if (queueRow != null && queueRow.getStatus() == QueueStatus.WAITING) {
+            queueRow.setStatus(QueueStatus.CANCELLED);
+            queueEntryRepository.save(queueRow);
+        }
+        if (resetQueuedState) {
+            booking.setCheckedIn(false);
+            booking.setCheckInTime(null);
+            booking.setAppointmentStatus(null);
+        }
+        Booking saved = bookingRepository.save(booking);
+        notifyRescheduled(saved, date, time);
+        return toSummary(saved);
     }
 
     @Transactional
@@ -449,6 +516,38 @@ public class BookingService {
         TimeSlot created = new TimeSlot(doctor, date, time, time.plusMinutes(duration));
         created.setBooked(true);
         return timeSlotRepository.save(created);
+    }
+
+    /** Patient + front-desk notifications after a successful move. */
+    private void notifyRescheduled(Booking booking, LocalDate date, LocalTime time) {
+        String dept = booking.getDepartment() != null ? booking.getDepartment().getName() : "—";
+        String body = String.format("APT-%04d", booking.getId()) + " · " + dept
+                + " · " + date + " " + isoTime(time);
+        if (booking.getPatient() != null) {
+            patientNotificationService.create(booking.getPatient().getId(),
+                    "appointment", "Appointment rescheduled", body, null);
+        }
+        notificationService.notifyQueueStaff(facilityIdOf(booking), "appointment",
+                "Appointment rescheduled", body, null);
+    }
+
+    /** Patient in-app notification when their booking is cancelled (self or admin). */
+    private void notifyCancelled(Booking booking) {
+        if (booking.getPatient() == null) return;
+        LocalDate date = booking.getTimeSlot() != null && booking.getTimeSlot().getDate() != null
+                ? booking.getTimeSlot().getDate()
+                : (booking.getBookingDate() != null ? booking.getBookingDate().toLocalDate() : null);
+        String dept = booking.getDepartment() != null ? booking.getDepartment().getName() : "—";
+        String body = String.format("APT-%04d", booking.getId()) + " · " + dept
+                + (date != null ? " · " + date : "") + " was cancelled.";
+        patientNotificationService.create(booking.getPatient().getId(),
+                "appointment", "Booking cancelled", body, null);
+    }
+
+    private static Long facilityIdOf(Booking booking) {
+        Department dept = booking.getDepartment();
+        if (dept != null && dept.getFacilityId() != null) return dept.getFacilityId();
+        return booking.getHospital() != null ? booking.getHospital().getId() : null;
     }
 
     private Booking requireOwnActiveBooking(Long bookingId, Long patientId) {

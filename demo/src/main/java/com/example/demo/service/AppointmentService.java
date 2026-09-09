@@ -235,7 +235,9 @@ public class AppointmentService {
                 doctorName,
                 at != null ? at.toString() : null,
                 deriveStatus(b),
-                paymentStatusOf(b));
+                paymentStatusOf(b),
+                b.getDepartment() != null ? b.getDepartment().getId() : null,
+                b.getHospital() != null ? b.getHospital().getId() : null);
     }
 
     // ===== Status derivation & transitions =====

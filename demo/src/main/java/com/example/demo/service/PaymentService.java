@@ -14,6 +14,7 @@ import com.example.demo.model.PaymentNetwork;
 import com.example.demo.model.PaymentStatus;
 import com.example.demo.model.PaymentTransaction;
 import com.example.demo.model.PaymentTxnStatus;
+import com.example.demo.model.QueueStatus;
 import com.example.demo.payment.AzaAmountConverter;
 import com.example.demo.payment.CheckoutSession;
 import com.example.demo.payment.PaymentGateway;
@@ -22,12 +23,14 @@ import com.example.demo.repository.BookingRepository;
 import com.example.demo.repository.PaymentHistoryRepository;
 import com.example.demo.repository.PaymentMethodRepository;
 import com.example.demo.repository.PaymentTransactionRepository;
+import com.example.demo.repository.QueueEntryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -49,21 +52,30 @@ public class PaymentService {
             PaymentNetwork.card, "Card"
     );
 
+    /** GH¢ fee for moving a booking to an EARLIER slot (major units GHS). */
+    public static final BigDecimal RESCHEDULE_SURCHARGE = new BigDecimal("20.00");
+
+    private static final String KIND_BOOKING_FEE = "BOOKING_FEE";
+    private static final String KIND_RESCHEDULE_SURCHARGE = "RESCHEDULE_SURCHARGE";
+
     private final PaymentMethodRepository methodRepository;
     private final PaymentTransactionRepository transactionRepository;
     private final PaymentHistoryRepository historyRepository;
     private final BookingRepository bookingRepository;
+    private final QueueEntryRepository queueEntryRepository;
     private final PaymentGateway paymentGateway;
 
     public PaymentService(PaymentMethodRepository methodRepository,
                           PaymentTransactionRepository transactionRepository,
                           PaymentHistoryRepository historyRepository,
                           BookingRepository bookingRepository,
+                          QueueEntryRepository queueEntryRepository,
                           PaymentGateway paymentGateway) {
         this.methodRepository = methodRepository;
         this.transactionRepository = transactionRepository;
         this.historyRepository = historyRepository;
         this.bookingRepository = bookingRepository;
+        this.queueEntryRepository = queueEntryRepository;
         this.paymentGateway = paymentGateway;
     }
 
@@ -205,10 +217,67 @@ public class PaymentService {
         tx.setStatus(PaymentTxnStatus.PENDING);
         tx.setMethodId(method.getId());
         tx.setProvider("aza");
+        tx.setKind(KIND_BOOKING_FEE);
         tx.setBookingIds(new ArrayList<>(ids));
         tx.setCreatedAt(LocalDateTime.now());
         transactionRepository.save(tx);
 
+        return new CheckoutResponse(session.checkoutUrl(), session.sessionId());
+    }
+
+    /**
+     * Checkout for the GH¢20 earlier-reschedule surcharge on ONE booking
+     * (POST /api/bookings/{id}/reschedule/surcharge). The surcharge is
+     * independent of the consultation fee: a checked-in or already-paid
+     * booking may still buy it — the ONLY blocker is a booking whose patient
+     * is currently being attended to (IN_CONSULTATION queue row), which also
+     * cannot be rescheduled at all.
+     */
+    @Transactional
+    public CheckoutResponse startSurchargeCheckout(Long patientId, Long bookingId, Long methodId) {
+        if (bookingId == null) {
+            throw new IllegalArgumentException("bookingId is required.");
+        }
+        if (methodId == null) {
+            throw new IllegalArgumentException(
+                    "methodId is required. Add a payment method first.");
+        }
+        PaymentMethod method = methodRepository.findByIdAndPatientId(methodId, patientId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Payment method not found. Use GET /api/patients/me/payment-methods."));
+        Booking booking = bookingRepository.findById(bookingId)
+                .filter(b -> b.getPatient() != null && b.getPatient().getId().equals(patientId))
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Booking not found on your account."));
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new ConflictException("Booking " + booking.getId()
+                    + " is cancelled and cannot be rescheduled.");
+        }
+        boolean inConsultation = queueEntryRepository.findByBookingId(bookingId)
+                .map(e -> e.getStatus())
+                .filter(s -> s == QueueStatus.IN_CONSULTATION)
+                .isPresent();
+        if (inConsultation) {
+            throw new ConflictException("You are being attended to now and cannot reschedule.");
+        }
+
+        long azaAmount = AzaAmountConverter.toAzaAmount(RESCHEDULE_SURCHARGE);
+        CheckoutSession session = paymentGateway.createSession(azaAmount, "GHS");
+
+        PaymentTransaction tx = new PaymentTransaction();
+        tx.setPatientId(patientId);
+        tx.setAzaSessionId(session.sessionId());
+        tx.setAmountMinor(azaAmount);
+        tx.setStatus(PaymentTxnStatus.PENDING);
+        tx.setMethodId(method.getId());
+        tx.setProvider("aza");
+        tx.setKind(KIND_RESCHEDULE_SURCHARGE);
+        tx.setBookingIds(new ArrayList<>(List.of(bookingId)));
+        tx.setCreatedAt(LocalDateTime.now());
+        transactionRepository.save(tx);
+
+        log.info("Reschedule-surcharge session {} created for booking {} (GH₵ {})",
+                session.sessionId(), bookingId, RESCHEDULE_SURCHARGE);
         return new CheckoutResponse(session.checkoutUrl(), session.sessionId());
     }
 
@@ -235,11 +304,21 @@ public class PaymentService {
         String methodLabel = method != null ? method.getLabel() : "Aza";
         LocalDateTime paidAt = LocalDateTime.now();
 
+        // A RESCHEDULE_SURCHARGE transaction only stamps the booking's paid
+        // instant (Booking.rescheduleSurchargePaidAt) + records history — it
+        // never flips paymentStatus/status, which stay owned by the booking
+        // fee lifecycle.
+        boolean surcharge = KIND_RESCHEDULE_SURCHARGE.equals(tx.getKind());
+
         for (Long bookingId : tx.getBookingIds()) {
             Booking b = bookingRepository.findById(bookingId).orElse(null);
             if (b == null) continue;
-            b.setPaymentStatus(PaymentStatus.PAID);
-            b.setStatus(BookingStatus.CONFIRMED);
+            if (surcharge) {
+                b.setRescheduleSurchargePaidAt(Instant.now());
+            } else {
+                b.setPaymentStatus(PaymentStatus.PAID);
+                b.setStatus(BookingStatus.CONFIRMED);
+            }
             bookingRepository.save(b);
 
             PaymentHistory h = new PaymentHistory();
@@ -250,14 +329,16 @@ public class PaymentService {
             h.setDepartment(b.getDepartment() != null ? b.getDepartment().getName() : "");
             h.setMethodLabel(methodLabel);
             h.setPaidDate(paidAt);
-            h.setAmount(b.getAmountDue());
+            h.setAmount(surcharge ? BigDecimal.valueOf(tx.getAmountMinor()) : b.getAmountDue());
             historyRepository.save(h);
         }
 
         tx.setStatus(PaymentTxnStatus.COMPLETED);
         tx.setCompletedAt(paidAt);
         transactionRepository.save(tx);
-        log.info("Aza session {} completed — {} booking(s) marked PAID", sessionId, tx.getBookingIds().size());
+        log.info("Aza session {} completed — {} booking(s) {}",
+                sessionId, tx.getBookingIds().size(),
+                surcharge ? "stamped with reschedule-surcharge paidAt" : "marked PAID");
         return true;
     }
 

@@ -1,8 +1,10 @@
 package com.example.demo.config;
 
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.SurchargeRequiredResponse;
 import com.example.demo.exception.ConflictException;
 import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.exception.SurchargeRequiredException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -109,6 +111,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(409, ex.getMessage()));
+    }
+
+    // Earlier reschedule without the surcharge paid → 402 Payment Required.
+    // Distinct body shape on purpose (code + amount the client must charge).
+    @ExceptionHandler(SurchargeRequiredException.class)
+    public ResponseEntity<SurchargeRequiredResponse> handleSurchargeRequired(SurchargeRequiredException ex) {
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                .body(new SurchargeRequiredResponse(
+                        "EARLIER_RESCHEDULE_SURCHARGE_REQUIRED",
+                        ex.getSurchargeAmount(),
+                        ex.getMessage()));
     }
 
     // Business logic errors from services
